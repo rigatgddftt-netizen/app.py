@@ -3,7 +3,7 @@ import socket
 import urllib.request
 import json
 import os
-from datetime import datetime
+import hashlib
 
 app = Flask(__name__)
 app.secret_key = 'geektyper_secret_key'
@@ -34,63 +34,65 @@ LOGIN_PAGE = '''
 </html>
 '''
 
-# === মূল কনসোল পেজ (GeekTyper ডিজাইন) ===
+# === মূল টার্মিনাল পেজ (GeekTyper মোবাইল ডিজাইন) ===
 MAIN_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>GeekTyper Terminal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeekTyper Mobile</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; font-size: 12px; }
         
-        /* ম্যাট্রিক্স ইফেক্ট */
-        #matrix { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.1; }
+        /* টার্মিনাল কন্টেইনার */
+        .terminal-container { display: flex; flex-direction: column; height: 100%; padding: 8px; }
         
-        /* মূল টার্মিনাল */
-        .terminal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 10px; box-sizing: border-box; z-index: 1; display: flex; flex-direction: column; }
-        
-        /* হেডার (উপরে বাম দিকে) */
-        .header { font-size: 10px; color: #0a0; text-shadow: 0 0 5px #0f0; line-height: 1.2; margin-bottom: 10px; }
-        
-        /* ডান দিকের ফোল্ডার/মেনু আইকন */
-        .sidebar { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 2; }
-        .folder { display: flex; align-items: center; justify-content: flex-end; cursor: pointer; font-size: 12px; color: #0f0; text-shadow: 0 0 5px #0f0; transition: 0.2s; }
-        .folder:hover { color: #fff; text-shadow: 0 0 10px #fff; }
-        .folder span { margin-left: 5px; }
+        /* হেডার */
+        .header { font-size: 10px; color: #0a0; text-shadow: 0 0 3px #0f0; line-height: 1.3; margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 5px; display: flex; justify-content: space-between; }
         
         /* মেইন আউটপুট এরিয়া */
-        .output { flex: 1; overflow-y: auto; font-size: 12px; white-space: pre-wrap; padding-bottom: 50px; }
+        .output-box { flex: 1; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; font-size: 11px; line-height: 1.4; padding-bottom: 10px; }
+        .output-box::-webkit-scrollbar { width: 3px; }
+        .output-box::-webkit-scrollbar-thumb { background: #0f0; }
         
         /* ইনপুট এরিয়া */
-        .input-area { display: flex; align-items: center; background: #000; border-top: 1px solid #333; padding: 5px; }
-        .input-area span { color: #0f0; margin-right: 5px; }
-        .input-area input { flex: 1; background: transparent; border: none; color: #0f0; font-family: 'Courier New', monospace; font-size: 14px; outline: none; }
+        .input-area { display: flex; align-items: center; border-top: 1px solid #333; padding-top: 5px; }
+        .input-area span { color: #0f0; margin-right: 5px; font-size: 12px; }
+        .input-area input { flex: 1; background: transparent; border: none; color: #0f0; font-family: 'Courier New', monospace; font-size: 13px; outline: none; padding: 5px 0; }
         
-        /* গ্লিচ ইফেক্ট */
-        .glitch { animation: glitch 1s linear infinite; }
-        @keyframes glitch { 2%, 64% { transform: translate(2px,0) skew(0deg); } 4%, 60% { transform: translate(-2px,0) skew(0deg); } 62% { transform: translate(0,0) skew(5deg); } }
+        /* ডান দিকের সাইডবার (একদম GeekTyper-এর মতো) */
+        .sidebar { position: absolute; top: 50px; right: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+        .folder { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #0f0; text-shadow: 0 0 5px #0f0; transition: 0.2s; background: rgba(0,20,0,0.8); padding: 4px; border-radius: 3px; border: 1px solid #0f0; }
+        .folder:hover { background: #0f0; color: #000; }
+        
+        /* এনিমেশন ইফেক্ট */
+        .blink { animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .glitch { animation: glitch 0.5s linear infinite; }
+        @keyframes glitch { 0% { transform: translate(1px,0); } 50% { transform: translate(-1px,0); } 100% { transform: translate(1px,0); } }
     </style>
 </head>
 <body>
-    <canvas id="matrix"></canvas>
-
-    <div class="terminal">
-        <!-- হেডার -->
+    <div class="terminal-container">
+        <!-- হেডার (GeekTyper স্টাইল) -->
         <div class="header">
-            <div id="clock">00:00:00</div>
-            <div>SCP Secure Systems v4.2654.2</div>
-            <div style="color: #8f8;">SLEVEL 6 Security Clearance Required</div>
-            <div>DATA LOCKED</div>
+            <div>
+                <div id="clock">00:00:00</div>
+                <div>SCP Secure Systems v4.2654.2</div>
+                <div style="color: #8f8;">SLEVEL 6 Security Clearance Required</div>
+                <div style="color: #f00;">DATA LOCKED</div>
+            </div>
         </div>
 
         <!-- মেইন আউটপুট -->
-        <div class="output" id="output">
-            <div class="glitch">☠️ GEEKTYPER SYSTEM INITIALIZED ☠️</div>
-            <div>=========================================</div>
-            <div>Welcome, Hacker. Type a command or click a folder.</div>
-            <div>Type 'help' to see available commands.</div>
-            <br>
-            <div>[+] Ready for input...</div>
+        <div class="output-box" id="output">
+[+] SYSTEM INITIALIZED...
+[+] CONNECTING TO SECURE SERVER...
+[+] ACCESS GRANTED.
+[+] TYPE 'help' FOR COMMANDS.
+
+<div class="glitch">[!] WARNING: AUTHORIZED ACCESS ONLY [!]</div>
         </div>
 
         <!-- ইনপুট এরিয়া -->
@@ -100,39 +102,28 @@ MAIN_PAGE = '''
         </div>
     </div>
 
-    <!-- ডান দিকের সাইডবার -->
+    <!-- ডান দিকের সাইডবার (ফোল্ডারগুলো) -->
     <div class="sidebar">
-        <div class="folder" onclick="runTool('nmap')"><span>📁 nmap_scan</span></div>
-        <div class="folder" onclick="runTool('ipinfo')"><span>📁 ip_tracker</span></div>
-        <div class="folder" onclick="runTool('ai')"><span>📁 hacker_ai</span></div>
-        <div class="folder" onclick="runTool('hash')"><span>📁 hash_cracker</span></div>
+        <div class="folder" onclick="quickCmd('nmap 8.8.8.8 53,443')">📁 nmap</div>
+        <div class="folder" onclick="quickCmd('ipinfo google.com')">📁 ipinfo</div>
+        <div class="folder" onclick="quickCmd('ai How to secure WiFi?')">📁 ai</div>
+        <div class="folder" onclick="quickCmd('hash hello')">📁 hash</div>
+        <div class="folder" onclick="quickCmd('help')">📁 help</div>
     </div>
 
     <script>
-        // ম্যাট্রিক্স ইফেক্ট
-        const canvas = document.getElementById('matrix');
-        const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        const fontSize = 16; const columns = canvas.width / fontSize;
-        const drops = []; for (let x = 0; x < columns; x++) drops[x] = 1;
-        function draw() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#0F0'; ctx.font = fontSize + 'px monospace';
-            for (let i = 0; i < drops.length; i++) {
-                const text = letters.charAt(Math.floor(Math.random() * letters.length));
-                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
-                drops[i]++;
-            }
-        }
-        setInterval(draw, 33);
-
         // ঘড়ি আপডেট
         setInterval(() => {
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString();
         }, 1000);
+
+        // স্ক্রিনে লেখা যোগ করা
+        function appendOutput(text) {
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerText += '\\n' + text;
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
 
         // কমান্ড হ্যান্ডলার
         async function handleCommand(event) {
@@ -147,17 +138,8 @@ MAIN_PAGE = '''
             }
         }
 
-        // আউটপুটে লেখা যোগ করা
-        function appendOutput(text) {
-            const outputDiv = document.getElementById('output');
-            outputDiv.innerText += '\\n' + text;
-            outputDiv.scrollTop = outputDiv.scrollHeight;
-        }
-
         // কমান্ড প্রসেসিং
         async function processCommand(cmd) {
-            appendOutput("[*] Executing: " + cmd);
-            
             try {
                 const response = await fetch('/execute', {
                     method: 'POST',
@@ -171,26 +153,19 @@ MAIN_PAGE = '''
             }
         }
 
-        // সাইডবার থেকে টুল চালানো
-        function runTool(tool) {
+        // সাইডবার থেকে দ্রুত কমান্ড চালানো
+        function quickCmd(cmd) {
             const input = document.getElementById('commandInput');
-            if (tool === 'nmap') {
-                input.value = 'nmap 8.8.8.8 53,443';
-            } else if (tool === 'ipinfo') {
-                input.value = 'ipinfo google.com';
-            } else if (tool === 'ai') {
-                input.value = 'ai How to secure a server?';
-            } else if (tool === 'hash') {
-                input.value = 'hash hello';
-            }
+            input.value = cmd;
             input.focus();
+            // অটোমেটিক এন্টার চাপার দরকার নেই, ইউজার নিজে চাপবে
         }
     </script>
 </body>
 </html>
 '''
 
-# === বাকি সব লজিক (একই থাকবে, শুধু টার্মিনাল কমান্ডের জন্য আপডেট) ===
+# === রাউটিং এবং লজিক ===
 @app.route('/')
 def index():
     if 'logged_in' in session:
@@ -226,32 +201,42 @@ def execute():
     # ১. nmap স্ক্যান
     if cmd.startswith('nmap'):
         parts = cmd.split()
-        ip = parts[1]
-        ports_str = parts[2]
-        ports = [int(p) for p in ports_str.split(',')]
-        output = f"[*] Starting Nmap scan on {ip}...\\n"
-        for port in ports:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(0.5)
-            if s.connect_ex((ip, port)) == 0:
-                output += f"[+] Port {port}: OPEN\\n"
-            s.close()
+        if len(parts) < 3:
+            output = "[-] Usage: nmap <ip> <port1,port2>"
+        else:
+            ip = parts[1]
+            ports_str = parts[2]
+            try:
+                ports = [int(p) for p in ports_str.split(',')]
+                output = f"[*] Nmap scan on {ip}...\\n"
+                for port in ports:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.5)
+                    if s.connect_ex((ip, port)) == 0:
+                        output += f"[+] Port {port}: OPEN\\n"
+                    s.close()
+            except:
+                output = "[-] Invalid port format."
 
-    # ২. আইপি ট্র্যাকার
+    # ২. ipinfo ট্র্যাকার
     elif cmd.startswith('ipinfo'):
-        domain = cmd.split()[1]
-        try:
-            ip = socket.gethostbyname(domain)
-            output = f"[+] Target IP: {ip}\\n"
-            req = urllib.request.Request(f"http://ip-api.com/json/{ip}?fields=66846719", headers={'User-Agent': 'Mozilla/5.0'})
-            res = urllib.request.urlopen(req, timeout=5)
-            ip_data = json.loads(res.read().decode())
-            if ip_data.get('status') == 'success':
-                output += f"Country: {ip_data.get('country')}\\nRegion: {ip_data.get('regionName')}\\nCity: {ip_data.get('city')}\\nISP: {ip_data.get('isp')}\\n"
-        except Exception as e:
-            output = f"[-] Error: {e}"
+        parts = cmd.split()
+        if len(parts) < 2:
+            output = "[-] Usage: ipinfo <domain>"
+        else:
+            domain = parts[1]
+            try:
+                ip = socket.gethostbyname(domain)
+                output = f"[+] Target IP: {ip}\\n"
+                req = urllib.request.Request(f"http://ip-api.com/json/{ip}?fields=66846719", headers={'User-Agent': 'Mozilla/5.0'})
+                res = urllib.request.urlopen(req, timeout=5)
+                ip_data = json.loads(res.read().decode())
+                if ip_data.get('status') == 'success':
+                    output += f"Country: {ip_data.get('country')}\\nRegion: {ip_data.get('regionName')}\\nCity: {ip_data.get('city')}\\nISP: {ip_data.get('isp')}\\n"
+            except Exception as e:
+                output = f"[-] Error: {e}"
 
-    # ৩. AI চ্যাট
+    # ৩. ai চ্যাট
     elif cmd.startswith('ai '):
         prompt = cmd[3:]
         try:
@@ -267,14 +252,19 @@ def execute():
         except Exception as e:
             output = f"[-] AI Error: {e}"
 
-    # ৪. হেল্প কমান্ড
+    # ৪. হ্যাশ জেনারেটর
+    elif cmd.startswith('hash '):
+        text = cmd[5:].encode('utf-8')
+        output = f"MD5: {hashlib.md5(text).hexdigest()}\\n"
+        output += f"SHA256: {hashlib.sha256(text).hexdigest()}"
+
+    # ৫. হেল্প
     elif cmd == 'help':
         output = """Available Commands:
 nmap <ip> <port1,port2> - Scan ports
 ipinfo <domain> - Get IP location
 ai <question> - Ask AI anything
-hash <text> - Generate MD5/SHA256
-clear - Clear screen"""
+hash <text> - Generate MD5/SHA256"""
 
     else:
         output = "[-] Command not found. Type 'help' for available commands."
