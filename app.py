@@ -1,59 +1,141 @@
-from flask import Flask, request, jsonify, render_template_string
-import subprocess
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 import socket
+import urllib.request
+import json
+import os
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 app = Flask(__name__)
+app.secret_key = 'super_secret_hacker_key'
 
-HTML_PAGE = '''
+# === লগইন পেজ ===
+LOGIN_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Web Hacking Console</title>
+    <title>System Login</title>
     <style>
-        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; }
-        input, button { padding: 10px; margin: 10px 0; background: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; }
-        button { cursor: pointer; font-weight: bold; }
-        button:hover { background: #0f0; color: #000; }
-        #result { 
-            white-space: pre-wrap; 
-            margin-top: 20px; 
-            border: 1px solid #333; 
-            padding: 15px; 
-            background: #050505; 
-            height: 400px; 
-            overflow-y: auto;
-            line-height: 1.4;
-        }
+        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; flex-direction: column; }
+        input { padding: 10px; margin: 5px; background: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; }
+        button { padding: 10px 20px; background: #0f0; color: #000; border: none; cursor: pointer; font-weight: bold; margin-top: 10px;}
+        .error { color: red; }
+        h1 { text-shadow: 0 0 10px #0f0; }
     </style>
 </head>
 <body>
-    <h1>Web Hacking Console</h1>
-    <label>Target IP:</label>
-    <input type="text" id="target_ip" value="8.8.8.8">
+    <h1>☠️ SECURE ACCESS ☠️</h1>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="POST" action="/login">
+        <input type="text" name="username" placeholder="Username" required><br>
+        <input type="password" name="password" placeholder="Password" required><br>
+        <button type="submit">LOGIN</button>
+    </form>
+</body>
+</html>
+'''
+
+# === মূল কনসোল পেজ (Puter.js AI সহ) ===
+MAIN_PAGE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ADVANCED HACKER CONSOLE</title>
+    <!-- Puter.js লাইব্রেরি - কোনো API Key ছাড়াই AI -->
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; margin: 0; }
+        #matrix { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.1; }
+        .container { position: relative; z-index: 1; }
+        input, button, select, textarea { padding: 10px; margin: 5px; background: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; }
+        button { cursor: pointer; font-weight: bold; }
+        button:hover { background: #0f0; color: #000; box-shadow: 0 0 10px #0f0;}
+        #result, #ai-result { white-space: pre-wrap; margin-top: 20px; border: 1px solid #333; padding: 15px; background: #050505; height: 250px; overflow-y: auto; line-height: 1.4; font-size: 14px;}
+        .section { margin-bottom: 20px; border-bottom: 1px dashed #333; padding-bottom: 10px; }
+        h1 { text-shadow: 0 0 15px #0f0; text-align: center; }
+        h3 { border-left: 3px solid #0f0; padding-left: 10px; }
+        .logout { position: absolute; top: 10px; right: 20px; color: red; text-decoration: none; border: 1px solid red; padding: 5px 10px;}
+        .ai-section { border: 2px solid #0f0; padding: 15px; background: #001100; margin-bottom: 20px; border-radius: 5px;}
+    </style>
+</head>
+<body>
+    <canvas id="matrix"></canvas>
     
-    <label>Port(s):</label>
-    <input type="text" id="port" value="53,443">
-    <br>
-    <button onclick="runCommand('nmap')">Run Nmap Scan</button>
-    <button onclick="runCommand('nc')">Connect via Netcat</button>
-    <div id="result">Output will appear here...</div>
+    <div class="container">
+        <a href="/logout" class="logout">LOGOUT</a>
+        <h1>☠️ ADVANCED HACKER CONSOLE ☠️</h1>
+        <p>Authorized Security Testing Only. Stay Ethical.</p>
+        
+        <!-- AI Section -->
+        <div class="ai-section">
+            <h3>[0] HACKER AI ASSISTANT</h3>
+            <input type="text" id="ai_prompt" placeholder="Ask anything (e.g., How to secure WiFi?)" style="width: 70%;">
+            <button onclick="askAI()">Ask AI</button>
+            <div id="ai-result">[+] AI is ready. Ask a question...</div>
+        </div>
+
+        <div class="section">
+            <h3>[1] IP & OSINT Tracker</h3>
+            <input type="text" id="target_link" value="https://google.com" placeholder="Enter Website Link" style="width: 50%;">
+            <button onclick="runCommand('track')">Track Info</button>
+        </div>
+
+        <div class="section">
+            <h3>[2] Massive Port Scanner</h3>
+            <input type="text" id="target_ip" value="8.8.8.8" placeholder="Target IP">
+            <select id="scan_type">
+                <option value="fast">Fast Scan (Top 100 Ports)</option>
+                <option value="full">Full Scan (1-10000 Ports)</option>
+            </select>
+            <button onclick="runCommand('portscan')">Start Scan</button>
+        </div>
+
+        <div class="section">
+            <h3>[3] OSINT Username Tracker</h3>
+            <input type="text" id="username" value="john_doe" placeholder="Enter Username">
+            <button onclick="runCommand('usertrack')">Find Profiles</button>
+        </div>
+        
+        <div class="section">
+            <h3>[4] Reverse Image Search (Google Lens Style)</h3>
+            <input type="text" id="image_url" value="https://i.imgur.com/B4h4W4j.jpg" placeholder="Paste Image URL">
+            <button onclick="runCommand('imgsearch')">Search Image</button>
+        </div>
+
+        <div id="result">[+] Awaiting commands... Output will appear here.</div>
+    </div>
 
     <script>
+        // Matrix Effect
+        const canvas = document.getElementById('matrix');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        const fontSize = 16; const columns = canvas.width / fontSize;
+        const drops = []; for (let x = 0; x < columns; x++) drops[x] = 1;
+        function draw() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#0F0'; ctx.font = fontSize + 'px monospace';
+            for (let i = 0; i < drops.length; i++) {
+                const text = letters.charAt(Math.floor(Math.random() * letters.length));
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+        }
+        setInterval(draw, 33);
+
+        // Tools Logic
         async function runCommand(type) {
             const resultDiv = document.getElementById('result');
-            const ip = document.getElementById('target_ip').value.trim();
-            const port = document.getElementById('port').value.trim();
-            
             let cmd = "";
             
-            if (type === 'nmap') {
-                cmd = `nmap -sV -p ${port} ${ip}`;
-            } else if (type === 'nc') {
-                const firstPort = port.split(',')[0].trim();
-                cmd = `echo "Testing Connection to ${ip}:${firstPort}" | nc -w 3 ${ip} ${firstPort}`;
-            }
+            if (type === 'track') cmd = `track ${document.getElementById('target_link').value.trim()}`;
+            else if (type === 'portscan') cmd = `portscan ${document.getElementById('target_ip').value.trim()} ${document.getElementById('scan_type').value}`;
+            else if (type === 'usertrack') cmd = `usertrack ${document.getElementById('username').value.trim()}`;
+            else if (type === 'imgsearch') cmd = `imgsearch ${document.getElementById('image_url').value.trim()}`;
 
-            resultDiv.innerText = "Running: " + cmd + "\\n\\n[+] Please wait...";
+            resultDiv.innerText = "[*] Executing: " + cmd + "\\n\\n[+] Please wait...\\n";
             
             try {
                 const response = await fetch('/execute', {
@@ -67,6 +149,23 @@ HTML_PAGE = '''
                 resultDiv.innerText = "[-] Error communicating with server.";
             }
         }
+
+        // AI Logic (Puter.js - কোনো API Key ছাড়াই)
+        async function askAI() {
+            const aiResultDiv = document.getElementById('ai-result');
+            const prompt = document.getElementById('ai_prompt').value.trim();
+            if(!prompt) return;
+            
+            aiResultDiv.innerText = "[*] AI is thinking...\\n";
+            
+            try {
+                // Puter.js ব্যবহার করে AI কল (কোনো Key বা Backend ছাড়াই)
+                const response = await puter.ai.chat(prompt);
+                aiResultDiv.innerText = response;
+            } catch (error) {
+                aiResultDiv.innerText = "[-] Error connecting to AI: " + error;
+            }
+        }
     </script>
 </body>
 </html>
@@ -74,78 +173,96 @@ HTML_PAGE = '''
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_PAGE)
+    if 'logged_in' in session:
+        return render_template_string(MAIN_PAGE)
+    return redirect(url_for('login'))
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        if request.form['username'] == 'admin' and request.form['password'] == 'hacker123':
+            session['logged_in'] = True
+            return redirect(url_for('index'))
+        else:
+            error = 'Invalid Credentials. Access Denied.'
+    return render_template_string(LOGIN_PAGE, error=error)
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
+# === অন্যান্য টুলস (আগের মতোই) ===
 @app.route('/execute', methods=['POST'])
 def execute():
+    if 'logged_in' not in session:
+        return jsonify({'output': '[-] Unauthorized. Please login.'})
+        
     data = request.get_json()
     cmd = data.get('cmd', '')
-    
-    if not cmd:
-        return jsonify({'output': '[-] No command provided.'})
+    output = ""
 
-    if cmd.startswith('nmap'):
+    if cmd.startswith('track'):
+        domain = cmd.split()[1].replace('https://', '').replace('http://', '').split('/')[0]
+        try:
+            ip = socket.gethostbyname(domain)
+            output += f"[+] Target IP: {ip}\\n"
+            req = urllib.request.Request(f"http://ip-api.com/json/{ip}?fields=66846719", headers={'User-Agent': 'Mozilla/5.0'})
+            res = urllib.request.urlopen(req, timeout=5)
+            ip_data = json.loads(res.read().decode())
+            if ip_data.get('status') == 'success':
+                output += f"Country: {ip_data.get('country')}\\nRegion: {ip_data.get('regionName')}\\nCity: {ip_data.get('city')}\\nISP: {ip_data.get('isp')}\\n"
+        except Exception as e:
+            output = f"[-] Error: {e}"
+
+    elif cmd.startswith('portscan'):
         parts = cmd.split()
-        target_ip = parts[-1] 
-        port_range = "80,443" 
-        
-        for p in parts:
-            if p.startswith('-p'):
-                if p == '-p' and parts.index(p) + 1 < len(parts):
-                    port_range = parts[parts.index(p) + 1]
-                else:
-                    port_range = p.replace('-p', '')
-        
-        try:
-            ports = []
-            for prt in port_range.split(','):
-                if '-' in prt:
-                    start, end = prt.split('-')
-                    ports.extend(range(int(start), int(end) + 1))
-                else:
-                    ports.append(int(prt))
-            
-            output = f"[*] Scanning {target_ip}...\\n"
-            open_ports = []
-            
-            for port in ports:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.5) 
-                result = s.connect_ex((target_ip, port))
-                if result == 0:
-                    open_ports.append(port)
-                    output += f"[+] Port {port}: OPEN\\n"
-                s.close()
-            
-            if not open_ports:
-                output += "[-] No open ports found.\\n"
-            else:
-                output += f"\\n[+] Total {len(open_ports)} open ports found.\\n"
-                
-            return jsonify({'output': output})
-            
-        except Exception as e:
-            return jsonify({'output': f"[-] Python Scanner Error: {str(e)}"})
-
-    elif cmd.startswith('echo') and 'nc' in cmd:
-        try:
-            parts = cmd.split()
-            ip = parts[-2]
-            port = int(parts[-1])
-            
+        ip = parts[1]
+        scan_type = parts[2]
+        if scan_type == 'fast':
+            ports = [21, 22, 80, 443, 3306, 8080]
+            output = f"[*] Fast scanning {ip}...\\n"
+        else:
+            ports = range(1, 1001)
+            output = f"[*] Full scanning {ip} (1-1000)...\\n"
+        open_ports = []
+        for port in ports:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            result = s.connect_ex((ip, port))
-            if result == 0:
-                output = f"[+] Success! Connected to {ip}:{port}"
-            else:
-                output = f"[-] Connection refused to {ip}:{port}"
+            s.settimeout(0.1)
+            if s.connect_ex((ip, port)) == 0:
+                open_ports.append(port)
+                output += f"[+] Port {port}: OPEN\\n"
             s.close()
-            return jsonify({'output': output})
-        except Exception as e:
-            return jsonify({'output': f"[-] Netcat Python Error: {str(e)}"})
-    else:
-        return jsonify({'output': '[-] This command is not supported.'})
+        if not open_ports: output += "[-] No open ports found.\\n"
+
+    elif cmd.startswith('usertrack'):
+        username = cmd.split()[1]
+        output = f"[*] Searching username: {username}...\\n"
+        sites = {
+            "Facebook": f"https://www.facebook.com/{username}",
+            "Instagram": f"https://www.instagram.com/{username}",
+            "Twitter/X": f"https://twitter.com/{username}",
+            "GitHub": f"https://github.com/{username}",
+            "TikTok": f"https://www.tiktok.com/@{username}"
+        }
+        for site, url in sites.items():
+            try:
+                req = urllib.request.Request(url, method='HEAD', headers={'User-Agent': 'Mozilla/5.0'})
+                res = urllib.request.urlopen(req, timeout=3)
+                if res.status == 200:
+                    output += f"[+] Found on {site}: {url}\\n"
+            except:
+                pass
+        output += "\\n[+] Search complete.\\n"
+
+    elif cmd.startswith('imgsearch'):
+        img_url = cmd.split()[1]
+        output = f"[*] Initiating Reverse Image Search for: {img_url}\\n"
+        lens_url = f"https://lens.google.com/uploadbyurl?url={img_url}"
+        output += f"\\n[+] View Results Here: {lens_url}\\n"
+
+    return jsonify({'output': output})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
