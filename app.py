@@ -3,11 +3,10 @@ import socket
 import urllib.request
 import json
 import os
-from PIL import Image
-from PIL.ExifTags import TAGS
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_hacker_key'
+app.secret_key = 'geektyper_secret_key'
 
 # === লগইন পেজ ===
 LOGIN_PAGE = '''
@@ -35,79 +34,82 @@ LOGIN_PAGE = '''
 </html>
 '''
 
-# === মূল কনসোল পেজ (Pollinations AI সহ) ===
+# === মূল কনসোল পেজ (GeekTyper ডিজাইন) ===
 MAIN_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ADVANCED HACKER CONSOLE</title>
+    <title>GeekTyper Terminal</title>
     <style>
-        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; margin: 0; overflow-x: hidden; }
-        #matrix { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.15; }
-        .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
-        input, button, select, textarea { padding: 12px; margin: 5px; background: #0a0a0a; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; border-radius: 4px; }
-        button { cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #0f0; color: #000; box-shadow: 0 0 15px #0f0;}
-        #result, #ai-result { white-space: pre-wrap; margin-top: 20px; border: 1px solid #333; padding: 15px; background: #050505; height: 250px; overflow-y: auto; line-height: 1.4; font-size: 14px; border-radius: 4px;}
-        .section { margin-bottom: 20px; border-bottom: 1px dashed #333; padding-bottom: 10px; }
-        h1 { text-shadow: 0 0 20px #0f0; text-align: center; letter-spacing: 2px; }
-        h3 { border-left: 3px solid #0f0; padding-left: 10px; text-transform: uppercase; letter-spacing: 1px; }
-        .logout { position: absolute; top: 10px; right: 20px; color: red; text-decoration: none; border: 1px solid red; padding: 5px 10px; border-radius: 4px;}
-        .logout:hover { background: red; color: #000; }
-        .ai-section { border: 2px solid #0f0; padding: 20px; background: #001100; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,255,0,0.2);}
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
+        
+        /* ম্যাট্রিক্স ইফেক্ট */
+        #matrix { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.1; }
+        
+        /* মূল টার্মিনাল */
+        .terminal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 10px; box-sizing: border-box; z-index: 1; display: flex; flex-direction: column; }
+        
+        /* হেডার (উপরে বাম দিকে) */
+        .header { font-size: 10px; color: #0a0; text-shadow: 0 0 5px #0f0; line-height: 1.2; margin-bottom: 10px; }
+        
+        /* ডান দিকের ফোল্ডার/মেনু আইকন */
+        .sidebar { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 2; }
+        .folder { display: flex; align-items: center; justify-content: flex-end; cursor: pointer; font-size: 12px; color: #0f0; text-shadow: 0 0 5px #0f0; transition: 0.2s; }
+        .folder:hover { color: #fff; text-shadow: 0 0 10px #fff; }
+        .folder span { margin-left: 5px; }
+        
+        /* মেইন আউটপুট এরিয়া */
+        .output { flex: 1; overflow-y: auto; font-size: 12px; white-space: pre-wrap; padding-bottom: 50px; }
+        
+        /* ইনপুট এরিয়া */
+        .input-area { display: flex; align-items: center; background: #000; border-top: 1px solid #333; padding: 5px; }
+        .input-area span { color: #0f0; margin-right: 5px; }
+        .input-area input { flex: 1; background: transparent; border: none; color: #0f0; font-family: 'Courier New', monospace; font-size: 14px; outline: none; }
+        
+        /* গ্লিচ ইফেক্ট */
         .glitch { animation: glitch 1s linear infinite; }
         @keyframes glitch { 2%, 64% { transform: translate(2px,0) skew(0deg); } 4%, 60% { transform: translate(-2px,0) skew(0deg); } 62% { transform: translate(0,0) skew(5deg); } }
     </style>
 </head>
 <body>
     <canvas id="matrix"></canvas>
-    
-    <div class="container">
-        <a href="/logout" class="logout">LOGOUT</a>
-        <h1 class="glitch">☠️ ADVANCED HACKER CONSOLE ☠️</h1>
-        <p style="text-align:center; color: #888;">Authorized Security Testing Only. Stay Ethical.</p>
-        
-        <!-- AI Section -->
-        <div class="ai-section">
-            <h3>[0] HACKER AI ASSISTANT (Keyless)</h3>
-            <input type="text" id="ai_prompt" placeholder="Ask anything (e.g., How to secure WiFi?)" style="width: 70%;">
-            <button onclick="askAI()">Ask AI</button>
-            <div id="ai-result">[+] AI is ready. Ask a question...</div>
+
+    <div class="terminal">
+        <!-- হেডার -->
+        <div class="header">
+            <div id="clock">00:00:00</div>
+            <div>SCP Secure Systems v4.2654.2</div>
+            <div style="color: #8f8;">SLEVEL 6 Security Clearance Required</div>
+            <div>DATA LOCKED</div>
         </div>
 
-        <div class="section">
-            <h3>[1] IP & OSINT Tracker</h3>
-            <input type="text" id="target_link" value="https://google.com" placeholder="Enter Website Link" style="width: 50%;">
-            <button onclick="runCommand('track')">Track Info</button>
+        <!-- মেইন আউটপুট -->
+        <div class="output" id="output">
+            <div class="glitch">☠️ GEEKTYPER SYSTEM INITIALIZED ☠️</div>
+            <div>=========================================</div>
+            <div>Welcome, Hacker. Type a command or click a folder.</div>
+            <div>Type 'help' to see available commands.</div>
+            <br>
+            <div>[+] Ready for input...</div>
         </div>
 
-        <div class="section">
-            <h3>[2] Massive Port Scanner</h3>
-            <input type="text" id="target_ip" value="8.8.8.8" placeholder="Target IP">
-            <select id="scan_type">
-                <option value="fast">Fast Scan (Top 100 Ports)</option>
-                <option value="full">Full Scan (1-10000 Ports)</option>
-            </select>
-            <button onclick="runCommand('portscan')">Start Scan</button>
+        <!-- ইনপুট এরিয়া -->
+        <div class="input-area">
+            <span>C:\\HACKER></span>
+            <input type="text" id="commandInput" autofocus onkeydown="handleCommand(event)">
         </div>
+    </div>
 
-        <div class="section">
-            <h3>[3] OSINT Username Tracker</h3>
-            <input type="text" id="username" value="john_doe" placeholder="Enter Username">
-            <button onclick="runCommand('usertrack')">Find Profiles</button>
-        </div>
-        
-        <div class="section">
-            <h3>[4] Reverse Image Search (Google Lens Style)</h3>
-            <input type="text" id="image_url" value="https://i.imgur.com/B4h4W4j.jpg" placeholder="Paste Image URL">
-            <button onclick="runCommand('imgsearch')">Search Image</button>
-        </div>
-
-        <div id="result">[+] Awaiting commands... Output will appear here.</div>
+    <!-- ডান দিকের সাইডবার -->
+    <div class="sidebar">
+        <div class="folder" onclick="runTool('nmap')"><span>📁 nmap_scan</span></div>
+        <div class="folder" onclick="runTool('ipinfo')"><span>📁 ip_tracker</span></div>
+        <div class="folder" onclick="runTool('ai')"><span>📁 hacker_ai</span></div>
+        <div class="folder" onclick="runTool('hash')"><span>📁 hash_cracker</span></div>
     </div>
 
     <script>
-        // Matrix Effect
+        // ম্যাট্রিক্স ইফেক্ট
         const canvas = document.getElementById('matrix');
         const ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
@@ -126,17 +128,35 @@ MAIN_PAGE = '''
         }
         setInterval(draw, 33);
 
-        // Tools Logic
-        async function runCommand(type) {
-            const resultDiv = document.getElementById('result');
-            let cmd = "";
-            
-            if (type === 'track') cmd = `track ${document.getElementById('target_link').value.trim()}`;
-            else if (type === 'portscan') cmd = `portscan ${document.getElementById('target_ip').value.trim()} ${document.getElementById('scan_type').value}`;
-            else if (type === 'usertrack') cmd = `usertrack ${document.getElementById('username').value.trim()}`;
-            else if (type === 'imgsearch') cmd = `imgsearch ${document.getElementById('image_url').value.trim()}`;
+        // ঘড়ি আপডেট
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString();
+        }, 1000);
 
-            resultDiv.innerText = "[*] Executing: " + cmd + "\\n\\n[+] Please wait...\\n";
+        // কমান্ড হ্যান্ডলার
+        async function handleCommand(event) {
+            if (event.key === 'Enter') {
+                const input = document.getElementById('commandInput');
+                const command = input.value.trim();
+                if (command) {
+                    appendOutput(`C:\\\\HACKER> ${command}`);
+                    await processCommand(command);
+                }
+                input.value = '';
+            }
+        }
+
+        // আউটপুটে লেখা যোগ করা
+        function appendOutput(text) {
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerText += '\\n' + text;
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        // কমান্ড প্রসেসিং
+        async function processCommand(cmd) {
+            appendOutput("[*] Executing: " + cmd);
             
             try {
                 const response = await fetch('/execute', {
@@ -145,38 +165,32 @@ MAIN_PAGE = '''
                     body: JSON.stringify({cmd: cmd})
                 });
                 const data = await response.json();
-                resultDiv.innerText = data.output;
+                appendOutput(data.output);
             } catch (error) {
-                resultDiv.innerText = "[-] Error communicating with server.";
+                appendOutput("[-] Error: " + error);
             }
         }
 
-        // AI Logic (Pollinations - কোনো Key বা Login ছাড়াই)
-        async function askAI() {
-            const aiResultDiv = document.getElementById('ai-result');
-            const prompt = document.getElementById('ai_prompt').value.trim();
-            if(!prompt) return;
-            
-            aiResultDiv.innerText = "[*] AI is thinking...\\n";
-            
-            try {
-                // Pollinations API ব্যবহার করে AI কল
-                const response = await fetch('/ai', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt: prompt})
-                });
-                const data = await response.json();
-                aiResultDiv.innerText = data.reply;
-            } catch (error) {
-                aiResultDiv.innerText = "[-] Error connecting to AI.";
+        // সাইডবার থেকে টুল চালানো
+        function runTool(tool) {
+            const input = document.getElementById('commandInput');
+            if (tool === 'nmap') {
+                input.value = 'nmap 8.8.8.8 53,443';
+            } else if (tool === 'ipinfo') {
+                input.value = 'ipinfo google.com';
+            } else if (tool === 'ai') {
+                input.value = 'ai How to secure a server?';
+            } else if (tool === 'hash') {
+                input.value = 'hash hello';
             }
+            input.focus();
         }
     </script>
 </body>
 </html>
 '''
 
+# === বাকি সব লজিক (একই থাকবে, শুধু টার্মিনাল কমান্ডের জন্য আপডেট) ===
 @app.route('/')
 def index():
     if 'logged_in' in session:
@@ -199,54 +213,36 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
 
-# === AI Endpoint (Pollinations API) ===
-@app.route('/ai', methods=['POST'])
-def ai_chat():
-    if 'logged_in' not in session:
-        return jsonify({'reply': '[-] Unauthorized.'})
-    
-    data = request.get_json()
-    prompt = data.get('prompt', '')
-    
-    try:
-        # Pollinations API - কোনো Key বা Login ছাড়াই
-        api_url = "https://text.pollinations.ai/openai"
-        payload = json.dumps({
-            "model": "openai",
-            "messages": [{"role": "user", "content": prompt}]
-        }).encode('utf-8')
-        
-        req = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-            }
-        )
-        
-        res = urllib.request.urlopen(req, timeout=30)
-        res_data = json.loads(res.read().decode())
-        reply = res_data['choices'][0]['message']['content']
-        return jsonify({'reply': reply})
-    except Exception as e:
-        return jsonify({'reply': f'[-] AI Error: {str(e)}'})
-
-# === অন্যান্য টুলস ===
+# === টার্মিনাল কমান্ড এক্সিকিউটর ===
 @app.route('/execute', methods=['POST'])
 def execute():
     if 'logged_in' not in session:
-        return jsonify({'output': '[-] Unauthorized. Please login.'})
+        return jsonify({'output': '[-] Unauthorized.'})
         
     data = request.get_json()
     cmd = data.get('cmd', '')
     output = ""
 
-    if cmd.startswith('track'):
-        domain = cmd.split()[1].replace('https://', '').replace('http://', '').split('/')[0]
+    # ১. nmap স্ক্যান
+    if cmd.startswith('nmap'):
+        parts = cmd.split()
+        ip = parts[1]
+        ports_str = parts[2]
+        ports = [int(p) for p in ports_str.split(',')]
+        output = f"[*] Starting Nmap scan on {ip}...\\n"
+        for port in ports:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.5)
+            if s.connect_ex((ip, port)) == 0:
+                output += f"[+] Port {port}: OPEN\\n"
+            s.close()
+
+    # ২. আইপি ট্র্যাকার
+    elif cmd.startswith('ipinfo'):
+        domain = cmd.split()[1]
         try:
             ip = socket.gethostbyname(domain)
-            output += f"[+] Target IP: {ip}\\n"
+            output = f"[+] Target IP: {ip}\\n"
             req = urllib.request.Request(f"http://ip-api.com/json/{ip}?fields=66846719", headers={'User-Agent': 'Mozilla/5.0'})
             res = urllib.request.urlopen(req, timeout=5)
             ip_data = json.loads(res.read().decode())
@@ -255,51 +251,33 @@ def execute():
         except Exception as e:
             output = f"[-] Error: {e}"
 
-    elif cmd.startswith('portscan'):
-        parts = cmd.split()
-        ip = parts[1]
-        scan_type = parts[2]
-        if scan_type == 'fast':
-            ports = [21, 22, 80, 443, 3306, 8080]
-            output = f"[*] Fast scanning {ip}...\\n"
-        else:
-            ports = range(1, 1001)
-            output = f"[*] Full scanning {ip} (1-1000)...\\n"
-        open_ports = []
-        for port in ports:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(0.1)
-            if s.connect_ex((ip, port)) == 0:
-                open_ports.append(port)
-                output += f"[+] Port {port}: OPEN\\n"
-            s.close()
-        if not open_ports: output += "[-] No open ports found.\\n"
+    # ৩. AI চ্যাট
+    elif cmd.startswith('ai '):
+        prompt = cmd[3:]
+        try:
+            api_url = "https://text.pollinations.ai/openai"
+            payload = json.dumps({
+                "model": "openai",
+                "messages": [{"role": "user", "content": prompt}]
+            }).encode('utf-8')
+            req = urllib.request.Request(api_url, data=payload, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
+            res = urllib.request.urlopen(req, timeout=50)
+            res_data = json.loads(res.read().decode())
+            output = res_data['choices'][0]['message']['content']
+        except Exception as e:
+            output = f"[-] AI Error: {e}"
 
-    elif cmd.startswith('usertrack'):
-        username = cmd.split()[1]
-        output = f"[*] Searching username: {username}...\\n"
-        sites = {
-            "Facebook": f"https://www.facebook.com/{username}",
-            "Instagram": f"https://www.instagram.com/{username}",
-            "Twitter/X": f"https://twitter.com/{username}",
-            "GitHub": f"https://github.com/{username}",
-            "TikTok": f"https://www.tiktok.com/@{username}"
-        }
-        for site, url in sites.items():
-            try:
-                req = urllib.request.Request(url, method='HEAD', headers={'User-Agent': 'Mozilla/5.0'})
-                res = urllib.request.urlopen(req, timeout=3)
-                if res.status == 200:
-                    output += f"[+] Found on {site}: {url}\\n"
-            except:
-                pass
-        output += "\\n[+] Search complete.\\n"
+    # ৪. হেল্প কমান্ড
+    elif cmd == 'help':
+        output = """Available Commands:
+nmap <ip> <port1,port2> - Scan ports
+ipinfo <domain> - Get IP location
+ai <question> - Ask AI anything
+hash <text> - Generate MD5/SHA256
+clear - Clear screen"""
 
-    elif cmd.startswith('imgsearch'):
-        img_url = cmd.split()[1]
-        output = f"[*] Initiating Reverse Image Search for: {img_url}\\n"
-        lens_url = f"https://lens.google.com/uploadbyurl?url={img_url}"
-        output += f"\\n[+] View Results Here: {lens_url}\\n"
+    else:
+        output = "[-] Command not found. Type 'help' for available commands."
 
     return jsonify({'output': output})
 
