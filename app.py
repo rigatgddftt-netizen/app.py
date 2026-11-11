@@ -35,27 +35,28 @@ LOGIN_PAGE = '''
 </html>
 '''
 
-# === মূল কনসোল পেজ (Puter.js AI সহ) ===
+# === মূল কনসোল পেজ (Pollinations AI সহ) ===
 MAIN_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
     <title>ADVANCED HACKER CONSOLE</title>
-    <!-- Puter.js লাইব্রেরি - কোনো API Key ছাড়াই AI -->
-    <script src="https://js.puter.com/v2/"></script>
     <style>
-        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; margin: 0; }
-        #matrix { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.1; }
-        .container { position: relative; z-index: 1; }
-        input, button, select, textarea { padding: 10px; margin: 5px; background: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; }
-        button { cursor: pointer; font-weight: bold; }
-        button:hover { background: #0f0; color: #000; box-shadow: 0 0 10px #0f0;}
-        #result, #ai-result { white-space: pre-wrap; margin-top: 20px; border: 1px solid #333; padding: 15px; background: #050505; height: 250px; overflow-y: auto; line-height: 1.4; font-size: 14px;}
+        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; margin: 0; overflow-x: hidden; }
+        #matrix { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.15; }
+        .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
+        input, button, select, textarea { padding: 12px; margin: 5px; background: #0a0a0a; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; border-radius: 4px; }
+        button { cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #0f0; color: #000; box-shadow: 0 0 15px #0f0;}
+        #result, #ai-result { white-space: pre-wrap; margin-top: 20px; border: 1px solid #333; padding: 15px; background: #050505; height: 250px; overflow-y: auto; line-height: 1.4; font-size: 14px; border-radius: 4px;}
         .section { margin-bottom: 20px; border-bottom: 1px dashed #333; padding-bottom: 10px; }
-        h1 { text-shadow: 0 0 15px #0f0; text-align: center; }
-        h3 { border-left: 3px solid #0f0; padding-left: 10px; }
-        .logout { position: absolute; top: 10px; right: 20px; color: red; text-decoration: none; border: 1px solid red; padding: 5px 10px;}
-        .ai-section { border: 2px solid #0f0; padding: 15px; background: #001100; margin-bottom: 20px; border-radius: 5px;}
+        h1 { text-shadow: 0 0 20px #0f0; text-align: center; letter-spacing: 2px; }
+        h3 { border-left: 3px solid #0f0; padding-left: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .logout { position: absolute; top: 10px; right: 20px; color: red; text-decoration: none; border: 1px solid red; padding: 5px 10px; border-radius: 4px;}
+        .logout:hover { background: red; color: #000; }
+        .ai-section { border: 2px solid #0f0; padding: 20px; background: #001100; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,255,0,0.2);}
+        .glitch { animation: glitch 1s linear infinite; }
+        @keyframes glitch { 2%, 64% { transform: translate(2px,0) skew(0deg); } 4%, 60% { transform: translate(-2px,0) skew(0deg); } 62% { transform: translate(0,0) skew(5deg); } }
     </style>
 </head>
 <body>
@@ -63,12 +64,12 @@ MAIN_PAGE = '''
     
     <div class="container">
         <a href="/logout" class="logout">LOGOUT</a>
-        <h1>☠️ ADVANCED HACKER CONSOLE ☠️</h1>
-        <p>Authorized Security Testing Only. Stay Ethical.</p>
+        <h1 class="glitch">☠️ ADVANCED HACKER CONSOLE ☠️</h1>
+        <p style="text-align:center; color: #888;">Authorized Security Testing Only. Stay Ethical.</p>
         
         <!-- AI Section -->
         <div class="ai-section">
-            <h3>[0] HACKER AI ASSISTANT</h3>
+            <h3>[0] HACKER AI ASSISTANT (Keyless)</h3>
             <input type="text" id="ai_prompt" placeholder="Ask anything (e.g., How to secure WiFi?)" style="width: 70%;">
             <button onclick="askAI()">Ask AI</button>
             <div id="ai-result">[+] AI is ready. Ask a question...</div>
@@ -150,7 +151,7 @@ MAIN_PAGE = '''
             }
         }
 
-        // AI Logic (Puter.js - কোনো API Key ছাড়াই)
+        // AI Logic (Pollinations - কোনো Key বা Login ছাড়াই)
         async function askAI() {
             const aiResultDiv = document.getElementById('ai-result');
             const prompt = document.getElementById('ai_prompt').value.trim();
@@ -159,11 +160,16 @@ MAIN_PAGE = '''
             aiResultDiv.innerText = "[*] AI is thinking...\\n";
             
             try {
-                // Puter.js ব্যবহার করে AI কল (কোনো Key বা Backend ছাড়াই)
-                const response = await puter.ai.chat(prompt);
-                aiResultDiv.innerText = response;
+                // Pollinations API ব্যবহার করে AI কল
+                const response = await fetch('/ai', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prompt: prompt})
+                });
+                const data = await response.json();
+                aiResultDiv.innerText = data.reply;
             } catch (error) {
-                aiResultDiv.innerText = "[-] Error connecting to AI: " + error;
+                aiResultDiv.innerText = "[-] Error connecting to AI.";
             }
         }
     </script>
@@ -193,7 +199,40 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
 
-# === অন্যান্য টুলস (আগের মতোই) ===
+# === AI Endpoint (Pollinations API) ===
+@app.route('/ai', methods=['POST'])
+def ai_chat():
+    if 'logged_in' not in session:
+        return jsonify({'reply': '[-] Unauthorized.'})
+    
+    data = request.get_json()
+    prompt = data.get('prompt', '')
+    
+    try:
+        # Pollinations API - কোনো Key বা Login ছাড়াই
+        api_url = "https://text.pollinations.ai/openai"
+        payload = json.dumps({
+            "model": "openai",
+            "messages": [{"role": "user", "content": prompt}]
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(
+            api_url,
+            data=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0'
+            }
+        )
+        
+        res = urllib.request.urlopen(req, timeout=30)
+        res_data = json.loads(res.read().decode())
+        reply = res_data['choices'][0]['message']['content']
+        return jsonify({'reply': reply})
+    except Exception as e:
+        return jsonify({'reply': f'[-] AI Error: {str(e)}'})
+
+# === অন্যান্য টুলস ===
 @app.route('/execute', methods=['POST'])
 def execute():
     if 'logged_in' not in session:
