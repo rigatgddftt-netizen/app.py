@@ -6,7 +6,7 @@ EDITOR_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Spider-Verse Neon Editor</title>
+    <title>Magic Color Editor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
@@ -18,15 +18,14 @@ EDITOR_PAGE = '''
             color: #fff; min-height: 100vh; overflow-x: hidden;
         }
 
-        /* মায়াবী নিয়ন ব্যাকগ্রাউন্ড গ্লো */
         .glow-bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at 20% 30%, rgba(255, 0, 204, 0.3) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 70%, rgba(1, 205, 254, 0.3) 0%, transparent 50%);
-            z-index: -1; filter: blur(40px); animation: pulse 6s infinite alternate;
+            background: radial-gradient(circle at 20% 30%, rgba(255, 0, 204, 0.2) 0%, transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(1, 205, 254, 0.2) 0%, transparent 40%);
+            z-index: -1; filter: blur(50px); animation: pulse 8s infinite alternate;
         }
 
-        @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 1; } }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.1); opacity: 1; } }
 
         .container { max-width: 900px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
 
@@ -65,22 +64,32 @@ EDITOR_PAGE = '''
 
         .preview-area img, .preview-area video {
             max-width: 100%; max-height: 350px; border-radius: 10px;
-            object-fit: contain; transition: filter 1s ease; /* ফিল্টার স্মুথলি আসবে */
+            object-fit: contain; transition: filter 1s ease;
         }
 
-        .btn-container { text-align: center; margin-top: 20px; }
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; mix-blend-mode: screen; opacity: 0; transition: opacity 1s;
+        }
+
+        .btn-container { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
 
         .magic-btn {
             padding: 15px 30px; border-radius: 30px; border: none;
-            background: linear-gradient(45deg, #ff00cc, #01cdfe);
             color: white; font-weight: bold; font-size: 1.1rem;
-            cursor: pointer; box-shadow: 0 0 20px rgba(255, 0, 204, 0.6);
-            transition: 0.3s;
+            cursor: pointer; transition: 0.3s;
+            text-shadow: 1px 1px 2px #000;
         }
 
-        .magic-btn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(1, 205, 254, 0.8); }
+        .btn-spider { background: linear-gradient(45deg, #ff00cc, #01cdfe); box-shadow: 0 0 20px rgba(255, 0, 204, 0.6); }
+        .btn-spider:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(1, 205, 254, 0.8); }
 
-        /* লোডিং স্পিনার */
+        .btn-hdr { background: linear-gradient(45deg, #ffb347, #00b09b); box-shadow: 0 0 20px rgba(255, 179, 71, 0.6); }
+        .btn-hdr:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(0, 176, 155, 0.8); }
+
+        .btn-reset { background: #555; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .btn-reset:hover { transform: scale(1.05); background: #777; }
+
         .loader {
             display: none; border: 4px solid rgba(255, 255, 255, 0.1);
             border-top: 4px solid #01cdfe; border-radius: 50%;
@@ -95,7 +104,7 @@ EDITOR_PAGE = '''
     <div class="glow-bg"></div>
 
     <div class="container">
-        <h1>Spider-Verse Magic Editor</h1>
+        <h1>Magic Color Editor</h1>
         
         <div class="glass-panel">
             <div class="file-upload-wrapper">
@@ -104,16 +113,17 @@ EDITOR_PAGE = '''
             </div>
 
             <div class="preview-area" id="previewContainer">
-                <!-- ডিফল্ট ইমেজ -->
                 <img id="previewImg" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" alt="Preview">
                 <video id="previewVideo" style="display:none;" controls autoplay loop muted></video>
-                <div id="overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; mix-blend-mode: screen; opacity:0; transition: opacity 1s;"></div>
+                <div id="overlay"></div>
             </div>
             
             <div class="loader" id="loader"></div>
 
             <div class="btn-container">
-                <button class="magic-btn" onclick="applyMagic()">✨ Apply Spider-Verse Magic ✨</button>
+                <button class="magic-btn btn-spider" onclick="applySpiderVerse()">✨ Spider-Verse Neon ✨</button>
+                <button class="magic-btn btn-hdr" onclick="applyHDRNature()">🌿 HDR Nature & Golden 🌿</button>
+                <button class="magic-btn btn-reset" onclick="resetFilters()">Reset</button>
             </div>
         </div>
     </div>
@@ -125,7 +135,6 @@ EDITOR_PAGE = '''
         const loader = document.getElementById('loader');
         let activeMedia = previewImg;
 
-        // ভিডিও বা ছবি আপলোড
         document.getElementById('mediaUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
@@ -133,11 +142,7 @@ EDITOR_PAGE = '''
                 const reader = new FileReader();
                 
                 reader.onload = function(event) {
-                    // ফিল্টার রিসেট
-                    previewImg.style.filter = 'none';
-                    previewVideo.style.filter = 'none';
-                    overlay.style.opacity = '0';
-
+                    resetFilters();
                     if (fileType.startsWith('image/')) {
                         previewImg.src = event.target.result;
                         previewImg.style.display = 'block';
@@ -154,26 +159,38 @@ EDITOR_PAGE = '''
             }
         });
 
-        // ম্যাজিক বাটন ফাংশন
-        function applyMagic() {
-            // লোডার দেখাও
+        // স্পাইডার-ভার্স ইফেক্ট
+        function applySpiderVerse() {
             loader.style.display = 'block';
-            
-            // ১ সেকেন্ড পর ম্যাজিক Apply হবে (দেখতে ভালো লাগবে)
             setTimeout(() => {
                 loader.style.display = 'none';
-                
-                // ১. মেইন ফিল্টার (কনট্রাস্ট, কালার বুস্ট)
-                // এখানে আমরা ছবির রঙকে স্পাইডারম্যানের মত নীল-বেগুনির দিকে নিচ্ছি
                 activeMedia.style.filter = 'contrast(1.4) saturate(2) hue-rotate(220deg) brightness(0.9)';
-
-                // ২. নিয়ন ওভারলে (Screen Blend Mode দিয়ে পুরো স্ক্রিনে ম্যাজেন্টা-সায়ান গ্লো)
-                // আমরা CSS গ্রেডিয়েন্ট ব্যবহার করে একটি কালারফুল লেয়ার তৈরি করছি
                 overlay.style.background = 'linear-gradient(45deg, rgba(255,0,204,0.3) 0%, rgba(1,205,254,0.3) 100%)';
-                overlay.style.opacity = '0.8'; // ওভারলে ওপাসিটি
-                overlay.style.boxShadow = 'inset 0 0 100px rgba(255,0,204,0.5)'; // ভেতরে গ্লো
+                overlay.style.opacity = '0.8';
+                overlay.style.boxShadow = 'inset 0 0 100px rgba(255,0,204,0.5)';
+            }, 1000);
+        }
 
-            }, 1000); // ১ সেকেন্ড ওয়েট
+        // HDR নেচার ইফেক্ট (সবুজ-সোনালি)
+        function applyHDRNature() {
+            loader.style.display = 'block';
+            setTimeout(() => {
+                loader.style.display = 'none';
+                // কনট্রাস্ট, স্যাচুরেশন এবং উষ্ণতা (সেপিয়া/হিউ) বাড়ানো
+                activeMedia.style.filter = 'contrast(1.3) saturate(2.5) sepia(0.3) hue-rotate(10deg) brightness(1.05)';
+                overlay.style.background = 'linear-gradient(45deg, rgba(255,179,71,0.2) 0%, rgba(0,176,155,0.2) 100%)';
+                overlay.style.opacity = '0.5';
+                overlay.style.boxShadow = 'inset 0 0 100px rgba(255,179,71,0.3)';
+            }, 1000);
+        }
+
+        // রিসেট
+        function resetFilters() {
+            previewImg.style.filter = 'none';
+            previewVideo.style.filter = 'none';
+            overlay.style.opacity = '0';
+            overlay.style.background = 'none';
+            overlay.style.boxShadow = 'none';
         }
     </script>
 </body>
