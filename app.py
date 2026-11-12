@@ -1,275 +1,359 @@
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
-import socket
-import urllib.request
-import json
-import os
-import hashlib
+from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
-app.secret_key = 'geektyper_secret_key'
 
-# === লগইন পেজ ===
-LOGIN_PAGE = '''
+# === মায়াবী সিনেমাটিক এডিটর পেজ ===
+EDITOR_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>System Login</title>
+    <title>Cinematic Color Editor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; flex-direction: column; }
-        input { padding: 10px; margin: 5px; background: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', monospace; }
-        button { padding: 10px 20px; background: #0f0; color: #000; border: none; cursor: pointer; font-weight: bold; margin-top: 10px;}
-        .error { color: red; }
-        h1 { text-shadow: 0 0 10px #0f0; }
-    </style>
-</head>
-<body>
-    <h1>☠️ SECURE ACCESS ☠️</h1>
-    {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    <form method="POST" action="/login">
-        <input type="text" name="username" placeholder="Username" required><br>
-        <input type="password" name="password" placeholder="Password" required><br>
-        <button type="submit">LOGIN</button>
-    </form>
-</body>
-</html>
-'''
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
 
-# === মূল টার্মিনাল পেজ (GeekTyper মোবাইল ডিজাইন) ===
-MAIN_PAGE = '''
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GeekTyper Mobile</title>
-    <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; font-size: 12px; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* মায়াবী গ্লো ইফেক্ট */
+        .glow-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 20% 30%, rgba(255, 0, 204, 0.2) 0%, transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(1, 205, 254, 0.2) 0%, transparent 40%);
+            z-index: -1;
+            filter: blur(50px);
+            animation: pulse 8s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(1.1); opacity: 1; }
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 {
+            text-align: center;
+            font-weight: 600;
+            font-size: 2rem;
+            background: -webkit-linear-gradient(45deg, #ff00cc, #01cdfe, #b967ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(255, 0, 204, 0.5);
+            margin-bottom: 30px;
+        }
+
+        /* গ্লাসমরফিজম (Glassmorphism) ডিজাইন */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .editor-grid { grid-template-columns: 1fr; }
+        }
+
+        .preview-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            min-height: 300px;
+            position: relative;
+        }
+
+        .preview-area img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 10px;
+            transition: filter 0.5s ease;
+        }
+
+        .controls-area h3 {
+            margin-top: 0;
+            color: #b967ff;
+            font-weight: 400;
+            border-bottom: 1px solid rgba(185, 103, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        /* কাস্টম ফাইল আপলোড বাটন */
+        .file-upload-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .file-upload-btn {
+            border: 2px dashed #01cdfe;
+            border-radius: 10px;
+            color: #01cdfe;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.3s;
+            background: rgba(1, 205, 254, 0.1);
+        }
+
+        .file-upload-btn:hover {
+            background: rgba(1, 205, 254, 0.2);
+            box-shadow: 0 0 15px rgba(1, 205, 254, 0.5);
+        }
+
+        .file-upload-wrapper input[type=file] {
+            position: absolute;
+            left: 0; top: 0; right: 0; bottom: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* মায়াবী কালার প্রিসেট */
+        .presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .preset-btn {
+            padding: 10px 15px;
+            border-radius: 30px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            font-size: 0.8rem;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        .preset-btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        .preset-cyber { background: linear-gradient(45deg, #ff00cc, #333399); }
+        .preset-magic { background: linear-gradient(45deg, #01cdfe, #b967ff); }
+        .preset-vapor { background: linear-gradient(45deg, #ff71ce, #01cdfe); }
+        .preset-sunset { background: linear-gradient(45deg, #ff512f, #dd2476); }
+        .preset-reset { background: #555; }
+
+        /* স্লাইডার ডিজাইন */
+        .slider-group {
+            margin-bottom: 15px;
+        }
         
-        /* টার্মিনাল কন্টেইনার */
-        .terminal-container { display: flex; flex-direction: column; height: 100%; padding: 8px; }
-        
-        /* হেডার */
-        .header { font-size: 10px; color: #0a0; text-shadow: 0 0 3px #0f0; line-height: 1.3; margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 5px; display: flex; justify-content: space-between; }
-        
-        /* মেইন আউটপুট এরিয়া */
-        .output-box { flex: 1; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; font-size: 11px; line-height: 1.4; padding-bottom: 10px; }
-        .output-box::-webkit-scrollbar { width: 3px; }
-        .output-box::-webkit-scrollbar-thumb { background: #0f0; }
-        
-        /* ইনপুট এরিয়া */
-        .input-area { display: flex; align-items: center; border-top: 1px solid #333; padding-top: 5px; }
-        .input-area span { color: #0f0; margin-right: 5px; font-size: 12px; }
-        .input-area input { flex: 1; background: transparent; border: none; color: #0f0; font-family: 'Courier New', monospace; font-size: 13px; outline: none; padding: 5px 0; }
-        
-        /* ডান দিকের সাইডবার (একদম GeekTyper-এর মতো) */
-        .sidebar { position: absolute; top: 50px; right: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
-        .folder { display: flex; align-items: center; cursor: pointer; font-size: 14px; color: #0f0; text-shadow: 0 0 5px #0f0; transition: 0.2s; background: rgba(0,20,0,0.8); padding: 4px; border-radius: 3px; border: 1px solid #0f0; }
-        .folder:hover { background: #0f0; color: #000; }
-        
-        /* এনিমেশন ইফেক্ট */
-        .blink { animation: blink 1s step-end infinite; }
-        @keyframes blink { 50% { opacity: 0; } }
-        .glitch { animation: glitch 0.5s linear infinite; }
-        @keyframes glitch { 0% { transform: translate(1px,0); } 50% { transform: translate(-1px,0); } 100% { transform: translate(1px,0); } }
+        .slider-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            color: #ddd;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 10px #ff00cc;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: linear-gradient(90deg, #ff00cc, #01cdfe);
+            border-radius: 2px;
+        }
+
+        .download-btn {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(45deg, #ff00cc, #01cdfe);
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 0, 204, 0.4);
+            transition: 0.3s;
+            margin-top: 10px;
+        }
+
+        .download-btn:hover {
+            box-shadow: 0 5px 25px rgba(1, 205, 254, 0.6);
+            transform: scale(1.02);
+        }
     </style>
 </head>
 <body>
-    <div class="terminal-container">
-        <!-- হেডার (GeekTyper স্টাইল) -->
-        <div class="header">
-            <div>
-                <div id="clock">00:00:00</div>
-                <div>SCP Secure Systems v4.2654.2</div>
-                <div style="color: #8f8;">SLEVEL 6 Security Clearance Required</div>
-                <div style="color: #f00;">DATA LOCKED</div>
+    <div class="glow-bg"></div>
+
+    <div class="container">
+        <h1>Cinematic Color Editor</h1>
+        
+        <div class="glass-panel">
+            <div class="file-upload-wrapper">
+                <div class="file-upload-btn">Click or Drop Image Here</div>
+                <input type="file" id="imageUpload" accept="image/*">
+            </div>
+
+            <div class="editor-grid">
+                <!-- প্রিভিউ এরিয়া -->
+                <div class="preview-area">
+                    <img id="preview" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" alt="Preview">
+                </div>
+
+                <!-- কন্ট্রোল এরিয়া -->
+                <div class="controls-area">
+                    <h3>Magic Presets</h3>
+                    <div class="presets">
+                        <button class="preset-btn preset-cyber" onclick="applyPreset('cyber')">Cyberpunk</button>
+                        <button class="preset-btn preset-magic" onclick="applyPreset('magic')">Magic</button>
+                        <button class="preset-btn preset-vapor" onclick="applyPreset('vapor')">Vaporwave</button>
+                        <button class="preset-btn preset-sunset" onclick="applyPreset('sunset')">Sunset</button>
+                        <button class="preset-btn preset-reset" onclick="applyPreset('none')">Reset</button>
+                    </div>
+
+                    <h3>Manual Adjustments</h3>
+                    <div class="slider-group">
+                        <label>Brightness</label>
+                        <input type="range" id="brightness" min="0" max="200" value="100" oninput="updateManual()">
+                    </div>
+                    <div class="slider-group">
+                        <label>Contrast</label>
+                        <input type="range" id="contrast" min="0" max="200" value="100" oninput="updateManual()">
+                    </div>
+                    <div class="slider-group">
+                        <label>Saturation</label>
+                        <input type="range" id="saturation" min="0" max="200" value="100" oninput="updateManual()">
+                    </div>
+                    <div class="slider-group">
+                        <label>Hue Shift</label>
+                        <input type="range" id="hue" min="0" max="360" value="0" oninput="updateManual()">
+                    </div>
+
+                    <button class="download-btn" onclick="downloadImage()">Download Cinematic Image</button>
+                </div>
             </div>
         </div>
-
-        <!-- মেইন আউটপুট -->
-        <div class="output-box" id="output">
-[+] SYSTEM INITIALIZED...
-[+] CONNECTING TO SECURE SERVER...
-[+] ACCESS GRANTED.
-[+] TYPE 'help' FOR COMMANDS.
-
-<div class="glitch">[!] WARNING: AUTHORIZED ACCESS ONLY [!]</div>
-        </div>
-
-        <!-- ইনপুট এরিয়া -->
-        <div class="input-area">
-            <span>C:\\HACKER></span>
-            <input type="text" id="commandInput" autofocus onkeydown="handleCommand(event)">
-        </div>
-    </div>
-
-    <!-- ডান দিকের সাইডবার (ফোল্ডারগুলো) -->
-    <div class="sidebar">
-        <div class="folder" onclick="quickCmd('nmap 8.8.8.8 53,443')">📁 nmap</div>
-        <div class="folder" onclick="quickCmd('ipinfo google.com')">📁 ipinfo</div>
-        <div class="folder" onclick="quickCmd('ai How to secure WiFi?')">📁 ai</div>
-        <div class="folder" onclick="quickCmd('hash hello')">📁 hash</div>
-        <div class="folder" onclick="quickCmd('help')">📁 help</div>
     </div>
 
     <script>
-        // ঘড়ি আপডেট
-        setInterval(() => {
-            const now = new Date();
-            document.getElementById('clock').innerText = now.toLocaleTimeString();
-        }, 1000);
+        const previewImg = document.getElementById('preview');
+        const imageUpload = document.getElementById('imageUpload');
 
-        // স্ক্রিনে লেখা যোগ করা
-        function appendOutput(text) {
-            const outputDiv = document.getElementById('output');
-            outputDiv.innerText += '\\n' + text;
-            outputDiv.scrollTop = outputDiv.scrollHeight;
-        }
-
-        // কমান্ড হ্যান্ডলার
-        async function handleCommand(event) {
-            if (event.key === 'Enter') {
-                const input = document.getElementById('commandInput');
-                const command = input.value.trim();
-                if (command) {
-                    appendOutput(`C:\\\\HACKER> ${command}`);
-                    await processCommand(command);
+        // ইমেজ আপলোড
+        imageUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    previewImg.src = event.target.result;
+                    resetFilters(); // নতুন ছবি দিলে ফিল্টার রিসেট
                 }
-                input.value = '';
+                reader.readAsDataURL(file);
             }
+        });
+
+        // প্রিসেট ফিল্টার
+        function applyPreset(type) {
+            resetSliders();
+            let filter = '';
+            
+            switch(type) {
+                case 'cyber':
+                    filter = 'contrast(1.3) saturate(1.8) hue-rotate(240deg) brightness(0.9)';
+                    break;
+                case 'magic':
+                    filter = 'contrast(1.1) saturate(2) hue-rotate(300deg) brightness(1.1)';
+                    break;
+                case 'vapor':
+                    filter = 'contrast(1.2) saturate(1.5) hue-rotate(150deg) sepia(0.2)';
+                    break;
+                case 'sunset':
+                    filter = 'contrast(1.1) saturate(1.4) sepia(0.4) hue-rotate(330deg)';
+                    break;
+                default:
+                    filter = 'none';
+            }
+            previewImg.style.filter = filter;
         }
 
-        // কমান্ড প্রসেসিং
-        async function processCommand(cmd) {
-            try {
-                const response = await fetch('/execute', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({cmd: cmd})
-                });
-                const data = await response.json();
-                appendOutput(data.output);
-            } catch (error) {
-                appendOutput("[-] Error: " + error);
-            }
+        // ম্যানুয়াল ফিল্টার
+        function updateManual() {
+            const b = document.getElementById('brightness').value;
+            const c = document.getElementById('contrast').value;
+            const s = document.getElementById('saturation').value;
+            const h = document.getElementById('hue').value;
+            
+            previewImg.style.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%) hue-rotate(${h}deg)`;
         }
 
-        // সাইডবার থেকে দ্রুত কমান্ড চালানো
-        function quickCmd(cmd) {
-            const input = document.getElementById('commandInput');
-            input.value = cmd;
-            input.focus();
-            // অটোমেটিক এন্টার চাপার দরকার নেই, ইউজার নিজে চাপবে
+        function resetSliders() {
+            document.getElementById('brightness').value = 100;
+            document.getElementById('contrast').value = 100;
+            document.getElementById('saturation').value = 100;
+            document.getElementById('hue').value = 0;
+        }
+
+        function resetFilters() {
+            previewImg.style.filter = 'none';
+            resetSliders();
+        }
+
+        // ডাউনলোড (শুধুমাত্র ব্রাউজারে প্রিভিউ)
+        function downloadImage() {
+            alert("Preview only! To download with full resolution, we need to add a backend Python library (Pillow) in the next step.");
         }
     </script>
 </body>
 </html>
 '''
 
-# === রাউটিং এবং লজিক ===
 @app.route('/')
 def index():
-    if 'logged_in' in session:
-        return render_template_string(MAIN_PAGE)
-    return redirect(url_for('login'))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        if request.form['username'] == 'admin' and request.form['password'] == 'hacker123':
-            session['logged_in'] = True
-            return redirect(url_for('index'))
-        else:
-            error = 'Invalid Credentials. Access Denied.'
-    return render_template_string(LOGIN_PAGE, error=error)
-
-@app.route('/logout')
-def logout():
-    session.pop('logged_in', None)
-    return redirect(url_for('login'))
-
-# === টার্মিনাল কমান্ড এক্সিকিউটর ===
-@app.route('/execute', methods=['POST'])
-def execute():
-    if 'logged_in' not in session:
-        return jsonify({'output': '[-] Unauthorized.'})
-        
-    data = request.get_json()
-    cmd = data.get('cmd', '')
-    output = ""
-
-    # ১. nmap স্ক্যান
-    if cmd.startswith('nmap'):
-        parts = cmd.split()
-        if len(parts) < 3:
-            output = "[-] Usage: nmap <ip> <port1,port2>"
-        else:
-            ip = parts[1]
-            ports_str = parts[2]
-            try:
-                ports = [int(p) for p in ports_str.split(',')]
-                output = f"[*] Nmap scan on {ip}...\\n"
-                for port in ports:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.5)
-                    if s.connect_ex((ip, port)) == 0:
-                        output += f"[+] Port {port}: OPEN\\n"
-                    s.close()
-            except:
-                output = "[-] Invalid port format."
-
-    # ২. ipinfo ট্র্যাকার
-    elif cmd.startswith('ipinfo'):
-        parts = cmd.split()
-        if len(parts) < 2:
-            output = "[-] Usage: ipinfo <domain>"
-        else:
-            domain = parts[1]
-            try:
-                ip = socket.gethostbyname(domain)
-                output = f"[+] Target IP: {ip}\\n"
-                req = urllib.request.Request(f"http://ip-api.com/json/{ip}?fields=66846719", headers={'User-Agent': 'Mozilla/5.0'})
-                res = urllib.request.urlopen(req, timeout=5)
-                ip_data = json.loads(res.read().decode())
-                if ip_data.get('status') == 'success':
-                    output += f"Country: {ip_data.get('country')}\\nRegion: {ip_data.get('regionName')}\\nCity: {ip_data.get('city')}\\nISP: {ip_data.get('isp')}\\n"
-            except Exception as e:
-                output = f"[-] Error: {e}"
-
-    # ৩. ai চ্যাট
-    elif cmd.startswith('ai '):
-        prompt = cmd[3:]
-        try:
-            api_url = "https://text.pollinations.ai/openai"
-            payload = json.dumps({
-                "model": "openai",
-                "messages": [{"role": "user", "content": prompt}]
-            }).encode('utf-8')
-            req = urllib.request.Request(api_url, data=payload, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
-            res = urllib.request.urlopen(req, timeout=50)
-            res_data = json.loads(res.read().decode())
-            output = res_data['choices'][0]['message']['content']
-        except Exception as e:
-            output = f"[-] AI Error: {e}"
-
-    # ৪. হ্যাশ জেনারেটর
-    elif cmd.startswith('hash '):
-        text = cmd[5:].encode('utf-8')
-        output = f"MD5: {hashlib.md5(text).hexdigest()}\\n"
-        output += f"SHA256: {hashlib.sha256(text).hexdigest()}"
-
-    # ৫. হেল্প
-    elif cmd == 'help':
-        output = """Available Commands:
-nmap <ip> <port1,port2> - Scan ports
-ipinfo <domain> - Get IP location
-ai <question> - Ask AI anything
-hash <text> - Generate MD5/SHA256"""
-
-    else:
-        output = "[-] Command not found. Type 'help' for available commands."
-
-    return jsonify({'output': output})
+    return render_template_string(EDITOR_PAGE)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
