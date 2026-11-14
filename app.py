@@ -1,353 +1,182 @@
-from flask import Flask, render_template_string, Response, request
-import io
+from flask import Flask, render_template_string, request, jsonify
+import urllib.parse
 
 app = Flask(__name__)
 
-EDITOR_PAGE = '''
+HTML_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>HD Magic Video Editor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Voice Image Editor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
-
-        body {
-            margin: 0; padding: 0;
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(to right, #24243e, #302b63, #0f0c29);
-            color: #fff; min-height: 100vh; overflow-x: hidden;
-            display: flex; flex-direction: column; align-items: center;
-        }
-
-        .container { width: 95%; max-width: 800px; padding: 20px 0; display: flex; flex-direction: column; align-items: center; }
-
-        h1 {
-            font-weight: 600; font-size: 1.8rem;
-            background: -webkit-linear-gradient(45deg, #ff00cc, #01cdfe, #b967ff);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            margin-bottom: 15px; text-align: center;
-        }
-
-        .open-gallery-btn {
-            background: linear-gradient(45deg, #01cdfe, #b967ff);
-            padding: 12px 30px; border: none; border-radius: 30px;
-            color: white; font-size: 1rem; font-weight: bold; cursor: pointer;
-            box-shadow: 0 0 15px rgba(1, 205, 254, 0.5);
-            transition: 0.3s;
-        }
-        .open-gallery-btn:hover { transform: scale(1.05); }
+        body { font-family: 'Poppins', sans-serif; margin: 0; padding: 20px; background: #f0f2f5; color: #333; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #4a90e2; text-align: center; margin-bottom: 20px; }
+        .container { width: 100%; max-width: 600px; background: #fff; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 20px; }
         
-        input[type="file"] { display: none; }
-
-        .preview-area {
-            width: 100%; display: none; justify-content: center; align-items: center;
-            background: #000; border-radius: 15px; overflow: hidden;
-            min-height: 200px; max-height: 400px; position: relative; margin: 15px 0;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        .mic-btn {
+            width: 80px; height: 80px; border-radius: 50%; border: none;
+            background: #4a90e2; color: white; font-size: 30px;
+            cursor: pointer; display: block; margin: 0 auto 20px auto;
+            box-shadow: 0 4px 10px rgba(74, 144, 226, 0.4); transition: 0.3s;
         }
+        .mic-btn.recording { background: #e74c3c; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(231, 76, 60, 0); } 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); } }
 
-        .preview-area img, .preview-area video {
-            width: 100%; max-height: 400px; object-fit: contain;
-            transition: filter 0.5s ease, transform 0.5s ease;
-        }
-
-        #overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; mix-blend-mode: screen; opacity: 0; transition: opacity 0.5s;
-        }
-
-        .controls { display: none; width: 100%; flex-direction: column; gap: 10px; margin-top: 10px; }
+        .text-input-area { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; }
+        .gen-btn { padding: 12px 20px; background: #4a90e2; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
         
-        .section-title { font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; margin-bottom: 5px; }
-
-        .btn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; width: 100%; }
-
-        .magic-btn {
-            padding: 12px; border-radius: 10px; border: none;
-            color: white; font-weight: 600; font-size: 0.85rem;
-            cursor: pointer; transition: 0.2s; text-align: center;
-        }
-
-        .magic-btn:active { transform: scale(0.95); }
-
-        .btn-hd { background: linear-gradient(135deg, #00b09b, #96c93d); box-shadow: 0 0 10px rgba(150, 201, 61, 0.4); }
-        .btn-spider { background: linear-gradient(135deg, #ff00cc, #01cdfe); box-shadow: 0 0 10px rgba(255, 0, 204, 0.4); }
-        .btn-hdr { background: linear-gradient(135deg, #ffb347, #00b09b); box-shadow: 0 0 10px rgba(255, 179, 71, 0.4); }
-        .btn-sunset { background: linear-gradient(135deg, #ff512f, #dd2476); }
-        .btn-cinematic { background: linear-gradient(135deg, #141E30, #243B55); border: 1px solid #444; }
-        .btn-reset { background: #444; }
-
-        .slider-group { display: flex; flex-direction: column; margin-bottom: 10px; width: 100%; }
-        .slider-group label { font-size: 0.8rem; color: #ccc; margin-bottom: 5px; display: flex; justify-content: space-between;}
+        .image-area { width: 100%; min-height: 300px; background: #f9f9f9; border: 2px dashed #ccc; border-radius: 10px; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; overflow: hidden; }
+        .image-area img { width: 100%; height: auto; border-radius: 10px; display: none; }
+        .loading { display: none; font-weight: bold; color: #4a90e2; }
         
-        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 5px 0; }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%;
-            background: #01cdfe; cursor: pointer; margin-top: -7px; box-shadow: 0 0 10px #01cdfe;
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%; height: 4px; cursor: pointer;
-            background: linear-gradient(90deg, #ff00cc, #01cdfe); border-radius: 2px;
-        }
-
-        .loader {
-            display: none; border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top: 4px solid #01cdfe; border-radius: 50%;
-            width: 30px; height: 30px; animation: spin 1s linear infinite;
-            margin: 10px auto;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .download-section { display: none; width: 100%; margin-top: 20px; border-top: 1px solid #333; padding-top: 15px; }
-
+        .download-btn { width: 100%; padding: 15px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold; display: none; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>HD Magic Editor</h1>
+        <h1>🎙️ AI Voice Image Editor</h1>
         
-        <button class="open-gallery-btn" id="openGalleryBtn">📂 Select Video/Photo</button>
-        <input type="file" id="mediaUpload" accept="image/*,video/*">
-
-        <div class="preview-area" id="previewContainer">
-            <img id="previewImg" alt="Preview">
-            <video id="previewVideo" style="display:none;" controls autoplay loop muted playsinline></video>
-            <div id="overlay"></div>
-            <div class="loader" id="loader"></div>
-        </div>
+        <!-- ভয়েস ইনপুট -->
+        <button class="mic-btn" id="micBtn">🎤</button>
+        <p style="text-align:center; font-size: 14px; color: #888;" id="statusText">Tap mic and speak...</p>
         
-        <div class="controls" id="controls">
-            <div class="section-title">Filters & Quality</div>
-            <div class="btn-grid">
-                <button class="magic-btn btn-hd" onclick="applyEffect('hd')">✨ Auto HD Enhance</button>
-                <button class="magic-btn btn-spider" onclick="applyEffect('spider')">Spider-Verse Neon</button>
-                <button class="magic-btn btn-hdr" onclick="applyEffect('hdr')">HDR Nature</button>
-                <button class="magic-btn btn-sunset" onclick="applyEffect('sunset')">Sunset Glow</button>
-                <button class="magic-btn btn-cinematic" onclick="applyEffect('cinematic')">Cinematic Blue</button>
-                <button class="magic-btn btn-reset" onclick="applyEffect('reset')">Reset</button>
-            </div>
-
-            <div class="section-title">Manual Adjustments</div>
-            <div class="slider-group">
-                <label>Sharpness (HD) <span id="valShapr">0</span></label>
-                <input type="range" id="sharpness" min="0" max="100" value="0" oninput="updateManual()">
-            </div>
-            <div class="slider-group">
-                <label>Brightness <span id="valBright">100</span></label>
-                <input type="range" id="brightness" min="0" max="200" value="100" oninput="updateManual()">
-            </div>
-            <div class="slider-group">
-                <label>Saturation <span id="valSat">100</span></label>
-                <input type="range" id="saturation" min="0" max="200" value="100" oninput="updateManual()">
-            </div>
+        <!-- টেক্সট ইনপুট -->
+        <div class="text-input-area">
+            <input type="text" id="promptText" placeholder="Describe your image...">
+            <button class="gen-btn" onclick="generateImage()">Generate</button>
         </div>
 
-        <!-- ডাউনলোড সেকশন -->
-        <div class="download-section" id="downloadSection">
-            <div class="section-title">Download</div>
-            <div class="btn-grid">
-                <button class="magic-btn" style="background: #ff9800; grid-column: 1 / -1;" onclick="downloadImage()">⬇️ Download High Quality Image</button>
-                <button class="magic-btn" style="background: #2196F3; grid-column: 1 / -1;" onclick="downloadLUT()">⬇️ Download LUT for CapCut/Premiere</button>
-            </div>
+        <!-- ইমেজ প্রিভিউ -->
+        <div class="image-area" id="imageContainer">
+            <span style="color: #aaa;">Your image will appear here</span>
+            <img id="resultImage" src="" alt="AI Image">
+            <div class="loading" id="loadingSpinner">Generating Magic... ⏳</div>
         </div>
+
+        <!-- ডাউনলোড বাটন -->
+        <button class="download-btn" id="downloadBtn" onclick="downloadImage()">⬇️ Download Image</button>
     </div>
 
     <script>
-        const previewImg = document.getElementById('previewImg');
-        const previewVideo = document.getElementById('previewVideo');
-        const overlay = document.getElementById('overlay');
-        const loader = document.getElementById('loader');
-        const previewContainer = document.getElementById('previewContainer');
-        const controls = document.getElementById('controls');
-        const openGalleryBtn = document.getElementById('openGalleryBtn');
-        const mediaUpload = document.getElementById('mediaUpload');
-        const downloadSection = document.getElementById('downloadSection');
-        let activeMedia = null;
-        let isVideo = false;
-        let currentEffect = 'reset';
+        const micBtn = document.getElementById('micBtn');
+        const statusText = document.getElementById('statusText');
+        const promptText = document.getElementById('promptText');
+        const resultImage = document.getElementById('resultImage');
+        const imageContainer = document.getElementById('imageContainer');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const downloadBtn = document.getElementById('downloadBtn');
 
-        openGalleryBtn.addEventListener('click', () => mediaUpload.click());
+        // ভয়েস রিকগনিশন সেটআপ
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
 
-        mediaUpload.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const fileType = file.type;
-                const reader = new FileReader();
-                
-                reader.onload = function(event) {
-                    openGalleryBtn.style.display = 'none';
-                    previewContainer.style.display = 'flex';
-                    controls.style.display = 'flex';
-                    downloadSection.style.display = 'flex';
-                    
-                    if (fileType.startsWith('image/')) {
-                        previewImg.src = event.target.result;
-                        previewImg.style.display = 'block';
-                        previewVideo.style.display = 'none';
-                        activeMedia = previewImg;
-                        isVideo = false;
-                    } else if (fileType.startsWith('video/')) {
-                        previewVideo.src = event.target.result;
-                        previewVideo.style.display = 'block';
-                        previewImg.style.display = 'none';
-                        activeMedia = previewVideo;
-                        isVideo = true;
-                    }
-                    applyEffect('reset');
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'bn-BD'; // বাংলা ভাষা সাপোর্ট (ইংরেজির জন্য 'en-US' করতে পারেন)
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            micBtn.addEventListener('click', () => {
+                if (micBtn.classList.contains('recording')) {
+                    recognition.stop();
+                    micBtn.classList.remove('recording');
+                    statusText.innerText = "Stopped listening.";
+                } else {
+                    recognition.start();
+                    micBtn.classList.add('recording');
+                    statusText.innerText = "Listening... Speak now!";
                 }
-                reader.readAsDataURL(file);
+            });
+
+            recognition.onresult = (event) => {
+                const speechResult = event.results[0][0].transcript;
+                promptText.value = speechResult;
+                statusText.innerText = "Recognized: " + speechResult;
+                micBtn.classList.remove('recording');
+                // ভয়েস রিকগনিশন শেষে অটোমেটিক ইমেজ জেনারেট করবে
+                generateImage(); 
+            };
+
+            recognition.onspeechend = () => {
+                recognition.stop();
+                micBtn.classList.remove('recording');
+            };
+
+            recognition.onerror = (event) => {
+                statusText.innerText = "Error: " + event.error;
+                micBtn.classList.remove('recording');
+            };
+        } else {
+            statusText.innerText = "Voice recognition not supported in this browser.";
+            micBtn.style.display = 'none';
+        }
+
+        // ইমেজ জেনারেশন ফাংশন
+        async function generateImage() {
+            const prompt = promptText.value.trim();
+            if (!prompt) {
+                alert("Please enter a description or speak first!");
+                return;
             }
-        });
 
-        function applyEffect(effect) {
-            if(!activeMedia) return;
-            currentEffect = effect;
-            
-            loader.style.display = 'block';
-            overlay.style.opacity = '0';
-            
-            setTimeout(() => {
-                loader.style.display = 'none';
-                
-                document.getElementById('sharpness').value = 0;
-                document.getElementById('brightness').value = 100;
-                document.getElementById('saturation').value = 100;
+            // UI আপডেট
+            imageContainer.querySelector('span').style.display = 'none';
+            resultImage.style.display = 'none';
+            downloadBtn.style.display = 'none';
+            loadingSpinner.style.display = 'block';
+            statusText.innerText = "Generating image...";
 
-                let filter = '';
-                let overlayBg = '';
+            try {
+                // Pollinations AI API-তে রিকোয়েস্ট পাঠানো (কোনো API Key ছাড়াই)
+                const encodedPrompt = encodeURIComponent(prompt + ", high quality, detailed, 4k");
+                const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true`;
                 
-                switch(effect) {
-                    case 'hd': filter = 'contrast(1.1) saturate(1.2) brightness(1.05)'; break;
-                    case 'spider': filter = 'contrast(1.4) saturate(2) hue-rotate(220deg) brightness(0.9)'; overlayBg = 'linear-gradient(45deg, rgba(255,0,204,0.3) 0%, rgba(1,205,254,0.3) 100%)'; break;
-                    case 'hdr': filter = 'contrast(1.3) saturate(2.5) sepia(0.3) hue-rotate(10deg) brightness(1.05)'; overlayBg = 'linear-gradient(45deg, rgba(255,179,71,0.2) 0%, rgba(0,176,155,0.2) 100%)'; break;
-                    case 'sunset': filter = 'contrast(1.2) saturate(1.8) hue-rotate(330deg) brightness(1.1)'; overlayBg = 'linear-gradient(45deg, rgba(255,81,47,0.3) 0%, rgba(221,36,118,0.3) 100%)'; break;
-                    case 'cinematic': filter = 'contrast(1.3) saturate(1.2) hue-rotate(200deg) brightness(0.9)'; overlayBg = 'linear-gradient(45deg, rgba(20,30,48,0.5) 0%, rgba(36,59,85,0.5) 100%)'; break;
-                    default: filter = 'none'; overlayBg = 'none';
-                }
-                
-                activeMedia.style.filter = filter;
-                if(overlayBg !== 'none') {
-                    overlay.style.background = overlayBg;
-                    overlay.style.opacity = '0.6';
-                }
-                updateManual();
-            }, 800);
+                // ইমেজ লোড হওয়া পর্যন্ত অপেক্ষা
+                const img = new Image();
+                img.onload = function() {
+                    resultImage.src = imageUrl;
+                    resultImage.style.display = 'block';
+                    loadingSpinner.style.display = 'none';
+                    downloadBtn.style.display = 'block';
+                    statusText.innerText = "Image generated successfully!";
+                };
+                img.onerror = function() {
+                    loadingSpinner.style.display = 'none';
+                    statusText.innerText = "Error generating image. Try again.";
+                };
+                img.src = imageUrl;
+
+            } catch (error) {
+                console.error(error);
+                loadingSpinner.style.display = 'none';
+                statusText.innerText = "Error connecting to AI.";
+            }
         }
 
-        function updateManual() {
-            if(!activeMedia) return;
-            const sharp = document.getElementById('sharpness').value;
-            const bright = document.getElementById('brightness').value;
-            const sat = document.getElementById('saturation').value;
-            
-            document.getElementById('valShapr').innerText = sharp;
-            document.getElementById('valBright').innerText = bright;
-            document.getElementById('valSat').innerText = sat;
-
-            let filterParts = [];
-            if (currentEffect === 'hd') filterParts.push('contrast(1.1) saturate(1.2)');
-            if (currentEffect === 'spider') filterParts.push('contrast(1.4) saturate(2) hue-rotate(220deg)');
-            if (currentEffect === 'hdr') filterParts.push('contrast(1.3) saturate(2.5) sepia(0.3) hue-rotate(10deg)');
-            if (currentEffect === 'sunset') filterParts.push('contrast(1.2) saturate(1.8) hue-rotate(330deg)');
-            if (currentEffect === 'cinematic') filterParts.push('contrast(1.3) saturate(1.2) hue-rotate(200deg)');
-
-            if (sharp > 0) filterParts.push(`contrast(${100 + (sharp/2)}%)`);
-            filterParts.push(`brightness(${bright}%)`);
-            filterParts.push(`saturate(${sat}%)`);
-
-            activeMedia.style.filter = filterParts.join(' ');
-        }
-
+        // ইমেজ ডাউনলোড ফাংশন
         function downloadImage() {
-            if(isVideo) {
-                alert("You selected a Video. Please use the 'Download LUT' button for videos.");
-                return;
-            }
-            if(!activeMedia || !previewImg.src) {
-                alert("Please select an Image first.");
-                return;
-            }
-            
-            // ফিল্টার অ্যাপ্লাই করে ক্যানভাসে ছবি আঁকা
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = previewImg.naturalWidth;
-            canvas.height = previewImg.naturalHeight;
-            
-            // ওভারলে (নিয়ন লেয়ার) সহ ছবি ডাউনলোড করা
-            ctx.filter = activeMedia.style.filter;
-            ctx.drawImage(previewImg, 0, 0);
-            
-            // ওভারলে রঙ যোগ করা
-            if (overlay.style.opacity > 0) {
-                ctx.globalCompositeOperation = 'screen';
-                ctx.fillStyle = overlay.style.background;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-            
-            const link = document.createElement('a');
-            link.download = 'hd_magic_image.png';
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-        }
+            const imgUrl = resultImage.src;
+            if (!imgUrl) return;
 
-        function downloadLUT() {
-            if(!activeMedia) {
-                alert("Please select a Video or Image first.");
-                return;
-            }
-            // LUT ফাইল ডাউনলোডের জন্য সার্ভারে রিকোয়েস্ট
-            window.location.href = '/download_lut?effect=' + currentEffect;
+            // একটি নতুন ট্যাবে ইমেজটি ওপেন করবে যাতে ইউজার সেভ করতে পারে
+            const link = document.createElement('a');
+            link.href = imgUrl;
+            link.download = 'ai_generated_image.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     </script>
 </body>
 </html>
 '''
 
-# LUT ফাইল জেনারেট করার ফাংশন
-def generate_lut(effect):
-    content = "TITLE \"Magic_LUT\"\nLUT_3D_SIZE 33\n"
-    for b in range(33):
-        for g in range(33):
-            for r in range(33):
-                r_val = r / 32.0
-                g_val = g / 32.0
-                b_val = b / 32.0
-                
-                if effect == 'spider':
-                    r_val = min(1.0, r_val * 1.3)
-                    g_val = min(1.0, g_val * 0.7)
-                    b_val = min(1.0, b_val * 1.6)
-                elif effect == 'hdr':
-                    r_val = min(1.0, r_val * 1.1)
-                    g_val = min(1.0, g_val * 1.3)
-                    b_val = min(1.0, b_val * 0.9)
-                elif effect == 'sunset':
-                    r_val = min(1.0, r_val * 1.5)
-                    g_val = min(1.0, g_val * 0.6)
-                    b_val = min(1.0, b_val * 0.4)
-                elif effect == 'cinematic':
-                    r_val = min(1.0, r_val * 0.8)
-                    g_val = min(1.0, g_val * 0.9)
-                    b_val = min(1.0, b_val * 1.4)
-                
-                content += f"{r_val:.6f} {g_val:.6f} {b_val:.6f}\n"
-    return content
-
 @app.route('/')
 def index():
-    return render_template_string(EDITOR_PAGE)
-
-@app.route('/download_lut')
-def download_lut():
-    effect = request.args.get('effect', 'reset')
-    lut_content = generate_lut(effect)
-    return Response(
-        lut_content,
-        mimetype='text/plain',
-        headers={'Content-Disposition': f'attachment;filename=magic_{effect}.cube'}
-    )
+    return render_template_string(HTML_PAGE)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
