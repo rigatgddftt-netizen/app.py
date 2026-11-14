@@ -4,6 +4,9 @@ import json
 
 app = Flask(__name__)
 
+# আপনার গুগল API Key এখানে বসান
+GEMINI_API_KEY = "AQ.Ab8RN6LoCELPDU69d-WPkHx1EIEUB7gP5CnJRMhhSxyose2Pyw"
+
 # === নিখুঁত AI চ্যাট ইন্টারফেস ===
 HTML_PAGE = '''
 <!DOCTYPE html>
@@ -11,7 +14,7 @@ HTML_PAGE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Assistant</title>
+    <title>AI Assistant (Gemini)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
@@ -27,7 +30,6 @@ HTML_PAGE = '''
             overflow: hidden;
         }
 
-        /* হেডার */
         .header {
             background: rgba(15, 23, 42, 0.8);
             backdrop-filter: blur(10px);
@@ -48,7 +50,6 @@ HTML_PAGE = '''
 
         .header h1 { font-size: 1.1rem; font-weight: 600; color: #f8fafc; }
 
-        /* চ্যাট এরিয়া */
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -62,7 +63,6 @@ HTML_PAGE = '''
         .chat-container::-webkit-scrollbar { width: 6px; }
         .chat-container::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
 
-        /* মেসেজ বাবল */
         .message {
             max-width: 85%;
             padding: 12px 16px;
@@ -94,7 +94,6 @@ HTML_PAGE = '''
             border: 1px solid #334155;
         }
 
-        /* টাইপিং ইন্ডিকেটর */
         .typing {
             display: none;
             align-self: flex-start;
@@ -122,7 +121,6 @@ HTML_PAGE = '''
             40% { transform: scale(1); }
         }
 
-        /* ইনপুট এরিয়া */
         .input-area {
             padding: 15px 20px;
             background: rgba(15, 23, 42, 0.9);
@@ -166,24 +164,19 @@ HTML_PAGE = '''
     </style>
 </head>
 <body>
-
-    <!-- হেডার -->
     <div class="header">
         <div class="status"></div>
-        <h1>AI Assistant</h1>
+        <h1>AI Assistant (Gemini)</h1>
     </div>
 
-    <!-- চ্যাট এরিয়া -->
     <div class="chat-container" id="chatContainer">
-        <div class="message ai">হ্যালো! আমি তোমার AI অ্যাসিস্ট্যান্ট। বাংলা বা ইংরেজিতে যেকোনো প্রশ্ন করতে পারো।</div>
+        <div class="message ai">হ্যালো! আমি গুগলের জেমিনি এআই। বাংলা বা ইংরেজিতে যেকোনো প্রশ্ন করতে পারো।</div>
     </div>
 
-    <!-- টাইপিং ইন্ডিকেটর -->
     <div class="typing" id="typingIndicator">
         <span></span><span></span><span></span>
     </div>
 
-    <!-- ইনপুট এরিয়া -->
     <div class="input-area">
         <input type="text" id="userInput" placeholder="মেসেজ লিখুন..." autocomplete="off">
         <button id="sendBtn" onclick="sendMessage()">➤</button>
@@ -195,29 +188,22 @@ HTML_PAGE = '''
         const sendBtn = document.getElementById('sendBtn');
         const typingIndicator = document.getElementById('typingIndicator');
 
-        // এন্টার চাপলে মেসেজ পাঠাবে
         userInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
+            if (e.key === 'Enter') sendMessage();
         });
 
-        // মেসেজ পাঠানোর ফাংশন
         async function sendMessage() {
             const message = userInput.value.trim();
             if (!message) return;
 
-            // ইউজারের মেসেজ দেখাও
             addMessage(message, 'user');
             userInput.value = '';
             
-            // বাটন ডিজেবল করো এবং টাইপিং দেখাও
             sendBtn.disabled = true;
             typingIndicator.style.display = 'block';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
             try {
-                // Pollinations AI API-তে রিকোয়েস্ট
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -225,11 +211,7 @@ HTML_PAGE = '''
                 });
 
                 const data = await response.json();
-                
-                // টাইপিং বন্ধ করো
                 typingIndicator.style.display = 'none';
-                
-                // AI-এর উত্তর দেখাও
                 addMessage(data.reply, 'ai');
             } catch (error) {
                 typingIndicator.style.display = 'none';
@@ -241,7 +223,6 @@ HTML_PAGE = '''
             }
         }
 
-        // চ্যাটে মেসেজ যোগ করার ফাংশন
         function addMessage(text, sender) {
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message', sender);
@@ -254,7 +235,7 @@ HTML_PAGE = '''
 </html>
 '''
 
-# === সার্ভার সাইড এআই লজিক ===
+# === সার্ভার সাইড এআই লজিক (Gemini API) ===
 @app.route('/')
 def index():
     return render_template_string(HTML_PAGE)
@@ -265,27 +246,26 @@ def chat():
     user_message = data.get('message', '')
 
     try:
-        # Pollinations AI API (কোনো Key ছাড়াই কাজ করে)
-        api_url = "https://text.pollinations.ai/openai"
+        # গুগলের Gemini 1.5 Flash API
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        
         payload = json.dumps({
-            "model": "openai",
-            "messages": [
-                {"role": "system", "content": "You are a helpful AI assistant. Always reply in the same language the user speaks (Bengali or English)."},
-                {"role": "user", "content": user_message}
-            ]
+            "contents": [{
+                "parts": [{"text": user_message}]
+            }]
         }).encode('utf-8')
 
         req = urllib.request.Request(
             api_url,
             data=payload,
-            headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+            headers={'Content-Type': 'application/json'}
         )
 
-        # ৬০ সেকেন্ড টাইমআউট
-        res = urllib.request.urlopen(req, timeout=60)
+        res = urllib.request.urlopen(req, timeout=30)
         res_data = json.loads(res.read().decode())
         
-        reply = res_data['choices'][0]['message']['content']
+        # Gemini-এর রেসপন্স থেকে টেক্সট বের করা
+        reply = res_data['candidates'][0]['content']['parts'][0]['text']
         return jsonify({'reply': reply})
 
     except Exception as e:
