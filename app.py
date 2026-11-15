@@ -1,275 +1,172 @@
-from flask import Flask, render_template_string, request, jsonify
-import urllib.request
-import json
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-# আপনার গুগল API Key এখানে বসান
-GEMINI_API_KEY = "AQ.Ab8RN6LoCELPDU69d-WPkHx1EIEUB7gP5CnJRMhhSxyose2Pyw"
-
-# === নিখুঁত AI চ্যাট ইন্টারফেস ===
 HTML_PAGE = '''
 <!DOCTYPE html>
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Assistant (Gemini)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Phone Dashboard</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .header {
-            background: rgba(15, 23, 42, 0.8);
-            backdrop-filter: blur(10px);
-            padding: 15px 20px;
-            border-bottom: 1px solid #1e293b;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            z-index: 10;
-        }
-
-        .header .status {
-            width: 10px; height: 10px;
-            background: #22c55e;
-            border-radius: 50%;
-            box-shadow: 0 0 10px #22c55e;
-        }
-
-        .header h1 { font-size: 1.1rem; font-weight: 600; color: #f8fafc; }
-
-        .chat-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            scroll-behavior: smooth;
-        }
-
-        .chat-container::-webkit-scrollbar { width: 6px; }
-        .chat-container::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-
-        .message {
-            max-width: 85%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-size: 0.95rem;
-            line-height: 1.5;
-            animation: fadeIn 0.3s ease-out;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message.user {
-            align-self: flex-end;
-            background: #3b82f6;
-            color: white;
-            border-bottom-right-radius: 2px;
-        }
-
-        .message.ai {
-            align-self: flex-start;
-            background: #1e293b;
-            color: #e2e8f0;
-            border-bottom-left-radius: 2px;
-            border: 1px solid #334155;
-        }
-
-        .typing {
-            display: none;
-            align-self: flex-start;
-            background: #1e293b;
-            padding: 12px 18px;
-            border-radius: 12px;
-            border-bottom-left-radius: 2px;
-            border: 1px solid #334155;
-        }
-
-        .typing span {
-            display: inline-block;
-            width: 8px; height: 8px;
-            background: #64748b;
-            border-radius: 50%;
-            margin: 0 2px;
-            animation: bounce 1.4s infinite ease-in-out both;
-        }
-
-        .typing span:nth-child(1) { animation-delay: -0.32s; }
-        .typing span:nth-child(2) { animation-delay: -0.16s; }
-
-        @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1); }
-        }
-
-        .input-area {
-            padding: 15px 20px;
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(10px);
-            border-top: 1px solid #1e293b;
-            display: flex;
-            gap: 10px;
-            z-index: 10;
-        }
-
-        .input-area input {
-            flex: 1;
-            padding: 14px 20px;
-            border-radius: 25px;
-            border: 1px solid #334155;
-            background: #1e293b;
-            color: #f8fafc;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        .input-area input:focus { border-color: #3b82f6; }
-
-        .input-area button {
-            width: 50px; height: 50px;
-            border-radius: 50%;
-            border: none;
-            background: #3b82f6;
-            color: white;
-            font-size: 1.2rem;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: 0.3s;
-        }
-
-        .input-area button:hover { background: #2563eb; transform: scale(1.05); }
-        .input-area button:disabled { background: #475569; cursor: not-allowed; }
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+        body { font-family: 'Poppins', sans-serif; margin: 0; padding: 20px; background: #0f0c29; background: linear-gradient(to right, #24243e, #302b63, #0f0c29); color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        h1 { font-size: 2rem; background: -webkit-linear-gradient(45deg, #01cdfe, #b967ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; margin-bottom: 20px; }
+        .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 20px; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 20px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        h3 { margin-top: 0; color: #01cdfe; border-bottom: 1px solid rgba(1, 205, 254, 0.3); padding-bottom: 10px; }
+        
+        /* ফাইল আপলোড বাটন */
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+        .file-input-btn { border: 2px dashed #01cdfe; border-radius: 10px; color: #01cdfe; padding: 15px; text-align: center; cursor: pointer; transition: 0.3s; background: rgba(1, 205, 254, 0.1); font-weight: bold; }
+        .file-input-btn:hover { background: rgba(1, 205, 254, 0.2); box-shadow: 0 0 15px rgba(1, 205, 254, 0.5); }
+        input[type="file"] { position: absolute; left: 0; top: 0; right: 0; bottom: 0; opacity: 0; cursor: pointer; }
+        
+        /* ফাইল লিস্ট */
+        #file-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; margin-top: 20px; }
+        .file-item { background: #1e293b; padding: 10px; border-radius: 10px; text-align: center; border: 1px solid #334155; overflow: hidden; }
+        .file-item img { width: 100%; height: 100px; object-fit: cover; border-radius: 5px; margin-bottom: 10px; }
+        .file-item video { width: 100%; height: 100px; object-fit: cover; border-radius: 5px; margin-bottom: 10px; }
+        .file-item .file-name { font-size: 0.8rem; color: #ccc; word-break: break-all; }
+        
+        /* ডিভাইস ইনফো */
+        .info-item { background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid #01cdfe; }
+        .info-item span { color: #01cdfe; font-weight: bold; }
+        
+        /* প্রোগ্রেস বার */
+        #progress-bar { width: 100%; height: 10px; background: #1e293b; border-radius: 5px; margin-top: 10px; overflow: hidden; display: none; }
+        #progress-fill { height: 100%; width: 0%; background: linear-gradient(45deg, #01cdfe, #b967ff); transition: width 0.3s; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="status"></div>
-        <h1>AI Assistant (Gemini)</h1>
-    </div>
-
-    <div class="chat-container" id="chatContainer">
-        <div class="message ai">হ্যালো! আমি গুগলের জেমিনি এআই। বাংলা বা ইংরেজিতে যেকোনো প্রশ্ন করতে পারো।</div>
-    </div>
-
-    <div class="typing" id="typingIndicator">
-        <span></span><span></span><span></span>
-    </div>
-
-    <div class="input-area">
-        <input type="text" id="userInput" placeholder="মেসেজ লিখুন..." autocomplete="off">
-        <button id="sendBtn" onclick="sendMessage()">➤</button>
+    <h1>📱 My Phone Dashboard</h1>
+    
+    <div class="container">
+        <!-- ফাইল এক্সপ্লোরার -->
+        <div class="glass-panel">
+            <h3>📂 Select Files from Phone</h3>
+            <div class="file-input-wrapper">
+                <div class="file-input-btn">Click to Select Files (Images, Videos, Audio)</div>
+                <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*">
+            </div>
+            <div id="progress-bar"><div id="progress-fill"></div></div>
+            <div id="file-list"></div>
+        </div>
+        
+        <!-- ডিভাইস ইনফো -->
+        <div class="glass-panel">
+            <h3>📱 Device Information</h3>
+            <div id="device-info">
+                <div class="info-item"><span>Device Name:</span> <span id="dev-name">Loading...</span></div>
+                <div class="info-item"><span>Operating System:</span> <span id="dev-os">Loading...</span></div>
+                <div class="info-item"><span>Browser:</span> <span id="dev-browser">Loading...</span></div>
+                <div class="info-item"><span>Screen Resolution:</span> <span id="dev-screen">Loading...</span></div>
+                <div class="info-item"><span>Battery Status:</span> <span id="dev-battery">Loading...</span></div>
+            </div>
+        </div>
     </div>
 
     <script>
-        const chatContainer = document.getElementById('chatContainer');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const typingIndicator = document.getElementById('typingIndicator');
-
-        userInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        async function sendMessage() {
-            const message = userInput.value.trim();
-            if (!message) return;
-
-            addMessage(message, 'user');
-            userInput.value = '';
+        // ডিভাইস ইনফো বের করা
+        window.onload = async function() {
+            // ডিভাইসের নাম (ব্রাউজার থেকে)
+            const deviceName = navigator.userAgent.split('(')[0] || 'Unknown';
+            document.getElementById('dev-name').innerText = deviceName;
             
-            sendBtn.disabled = true;
-            typingIndicator.style.display = 'block';
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            // অপারেটিং সিস্টেম
+            let os = "Unknown";
+            if (navigator.userAgent.indexOf("Android") !== -1) os = "Android";
+            else if (navigator.userAgent.indexOf("iPhone") !== -1) os = "iOS";
+            else if (navigator.userAgent.indexOf("Windows") !== -1) os = "Windows";
+            document.getElementById('dev-os').innerText = os;
 
-            try {
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
-                });
+            // ব্রাউজার
+            let browser = "Unknown";
+            if (navigator.userAgent.indexOf("Chrome") !== -1) browser = "Google Chrome";
+            else if (navigator.userAgent.indexOf("Firefox") !== -1) browser = "Mozilla Firefox";
+            else if (navigator.userAgent.indexOf("Safari") !== -1) browser = "Safari";
+            document.getElementById('dev-browser').innerText = browser;
 
-                const data = await response.json();
-                typingIndicator.style.display = 'none';
-                addMessage(data.reply, 'ai');
-            } catch (error) {
-                typingIndicator.style.display = 'none';
-                addMessage("দুঃখিত, একটি সমস্যা হয়েছে। আবার চেষ্টা করুন।", 'ai');
-            } finally {
-                sendBtn.disabled = false;
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                userInput.focus();
+            // স্ক্রিন রেজোলিউশন
+            document.getElementById('dev-screen').innerText = window.screen.width + " x " + window.screen.height + " px";
+
+            // ব্যাটারি স্ট্যাটাস (যদি ব্রাউজার সাপোর্ট করে)
+            if (navigator.getBattery) {
+                try {
+                    const battery = await navigator.getBattery();
+                    document.getElementById('dev-battery').innerText = Math.round(battery.level * 100) + "% " + (battery.charging ? "(Charging)" : "(Not Charging)");
+                } catch (e) {
+                    document.getElementById('dev-battery').innerText = "Not Available";
+                }
+            } else {
+                document.getElementById('dev-battery').innerText = "Not Supported";
             }
-        }
+        };
 
-        function addMessage(text, sender) {
-            const messageDiv = document.createElement('div');
-            messageDiv.classList.add('message', sender);
-            messageDiv.innerText = text;
-            chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
+        // ফাইল সিলেক্ট করার লজিক
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('file-list');
+        const progressBar = document.getElementById('progress-bar');
+        const progressFill = document.getElementById('progress-fill');
+
+        fileInput.addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+            
+            fileList.innerHTML = ""; // আগের লিস্ট মুছে ফেলা
+            progressBar.style.display = 'block'; // প্রোগ্রেস বার দেখানো
+            
+            let processed = 0;
+            const total = files.length;
+            
+            for (let file of files) {
+                const fileDiv = document.createElement('div');
+                fileDiv.classList.add('file-item');
+                
+                const fileName = document.createElement('div');
+                fileName.classList.add('file-name');
+                fileName.innerText = file.name;
+                
+                // ফাইল টাইপ অনুযায়ী প্রিভিউ
+                if (file.type.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    fileDiv.appendChild(img);
+                } else if (file.type.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = URL.createObjectURL(file);
+                    video.controls = true;
+                    fileDiv.appendChild(video);
+                } else {
+                    const icon = document.createElement('div');
+                    icon.innerText = "📄";
+                    icon.style.fontSize = "40px";
+                    fileDiv.appendChild(icon);
+                }
+                
+                fileDiv.appendChild(fileName);
+                fileList.appendChild(fileDiv);
+                
+                processed++;
+                // প্রোগ্রেস আপডেট
+                const percent = Math.round((processed / total) * 100);
+                progressFill.style.width = percent + "%";
+            }
+            
+            setTimeout(() => {
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 1000);
+        });
     </script>
 </body>
 </html>
 '''
 
-# === সার্ভার সাইড এআই লজিক (Gemini API) ===
 @app.route('/')
 def index():
     return render_template_string(HTML_PAGE)
-
-@app.route('/chat', methods=['POST'])
-def chat():
-    data = request.get_json()
-    user_message = data.get('message', '')
-
-    try:
-        # গুগলের Gemini 1.5 Flash API
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        
-        payload = json.dumps({
-            "contents": [{
-                "parts": [{"text": user_message}]
-            }]
-        }).encode('utf-8')
-
-        req = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={'Content-Type': 'application/json'}
-        )
-
-        res = urllib.request.urlopen(req, timeout=30)
-        res_data = json.loads(res.read().decode())
-        
-        # Gemini-এর রেসপন্স থেকে টেক্সট বের করা
-        reply = res_data['candidates'][0]['content']['parts'][0]['text']
-        return jsonify({'reply': reply})
-
-    except Exception as e:
-        return jsonify({'reply': f'[-] AI Error: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
